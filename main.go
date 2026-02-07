@@ -30,7 +30,7 @@ func main() {
 	log.Println("MySQL 连接成功")
 
 	// 自动迁移
-	if err := database.DB.AutoMigrate(&model.ScriptCategory{}, &model.Script{}, &model.User{}, &model.Device{}, &model.Task{}); err != nil {
+	if err := database.DB.AutoMigrate(&model.ScriptCategory{}, &model.Script{}, &model.User{}, &model.Device{}, &model.Task{}, &model.Application{}); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 
@@ -51,6 +51,7 @@ func main() {
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.POST("/user/login", handler.Login)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
+		api.POST("/applications", middleware.Auth, handler.SaveApplications)
 	}
 
 	addr := ":" + config.Cfg.Server.Port
