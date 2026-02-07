@@ -73,6 +73,55 @@ func Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": LoginResp{Token: token, User: profile}})
 }
 
+// CreateUserReq 添加用户请求
+type CreateUserReq struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// CreateUser 添加用户（需登录，parent_id 为当前用户）
+func CreateUser(c *gin.Context) {
+	userID, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	parentID := userID.(uint)
+
+	var req CreateUserReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	var existing model.User
+	if err := database.DB.Where("username = ?", req.Username).First(&existing).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名已存在"})
+		return
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "加密失败"})
+		return
+	}
+
+	user := model.User{
+		Username:     req.Username,
+		Password:     string(hashed),
+		ParentID:     &parentID,
+		RoleID:       0,
+		IsBanned:     false,
+		RegisterTime: time.Now(),
+	}
+	if err := database.DB.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "创建成功", "data": toProfile(&user)})
+}
+
 // GetUserProfile 获取当前用户资料
 func GetUserProfile(c *gin.Context) {
 	userID, exists := c.Get(middleware.UserIDKey)

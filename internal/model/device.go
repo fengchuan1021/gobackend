@@ -9,10 +9,11 @@ import (
 // Device 设备模型
 type Device struct {
 	ID        uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Serial    string         `gorm:"type:varchar(128);not null" json:"serial"`
+	Serial    string         `gorm:"type:varchar(128);uniqueIndex;not null" json:"serial"`
 	Codename  string         `gorm:"type:varchar(128)" json:"codename"`
-	UserID    uint           `gorm:"index;not null" json:"user_id"`
+	UserID    *uint          `gorm:"index" json:"user_id"`
 	Username  string         `gorm:"type:varchar(64)" json:"username"`
+	ExpireAt  *time.Time     `gorm:"index" json:"expire_at"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

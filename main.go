@@ -51,7 +51,10 @@ func main() {
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.POST("/user/login", handler.Login)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
+		api.POST("/user", middleware.Auth, handler.CreateUser)
 		api.POST("/applications", middleware.Auth, handler.SaveApplications)
+		api.GET("/devices", middleware.Auth, handler.SearchDevices)
+		api.PATCH("/devices/:id", middleware.Auth, handler.UpdateDevice)
 	}
 
 	addr := ":" + config.Cfg.Server.Port
