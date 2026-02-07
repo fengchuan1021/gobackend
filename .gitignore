@@ -1,0 +1,9 @@
+# 二进制
+gobackend
+*.exe
+
+# 环境配置（含敏感信息）
+product.env
+
+# Go
+vendor/

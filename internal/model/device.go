@@ -1,0 +1,26 @@
+package model
+
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
+
+// Device 设备模型
+type Device struct {
+	ID        uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Serial    string         `gorm:"type:varchar(128);not null" json:"serial"`
+	Codename  string         `gorm:"type:varchar(128)" json:"codename"`
+	UserID    uint           `gorm:"index;not null" json:"user_id"`
+	Username  string         `gorm:"type:varchar(64)" json:"username"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
+// TableName 指定表名
+func (Device) TableName() string {
+	return "devices"
+}
