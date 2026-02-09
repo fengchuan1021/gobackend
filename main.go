@@ -56,6 +56,12 @@ func main() {
 		api.GET("/devices", middleware.Auth, handler.SearchDevices)
 		api.PATCH("/devices/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", handler.GetTaskDetail)
+
+		dev := api.Group("/dev", middleware.Auth)
+		{
+			dev.GET("/getDevices", handler.GetDevices)
+			dev.GET("/getScreenShot", handler.GetScreenShot)
+		}
 	}
 
 	addr := ":" + config.Cfg.Server.Port

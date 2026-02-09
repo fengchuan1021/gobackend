@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ const (
 // Auth 从 token 头获取用户 ID，未找到则返回 401
 func Auth(c *gin.Context) {
 	token := c.GetHeader("token")
+	fmt.Println("token", token)
 	if token == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 		c.Abort()
