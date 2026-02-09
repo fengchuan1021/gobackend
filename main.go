@@ -30,7 +30,7 @@ func main() {
 	log.Println("MySQL 连接成功")
 
 	// 自动迁移
-	if err := database.DB.AutoMigrate(&model.ScriptCategory{}, &model.Script{}, &model.User{}, &model.Device{}, &model.Task{}, &model.Application{}); err != nil {
+	if err := database.DB.AutoMigrate(&model.ScriptCategory{}, &model.Script{}, &model.User{}, &model.Device{}, &model.Task{}, &model.Application{}, &model.Config{}); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 
@@ -46,10 +46,12 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	api := r.Group("/api", middleware.Auth)
+	api := r.Group("/api")
 	{
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.POST("/user/login", handler.Login)
+		api.POST("/devices/register", handler.RegisterDevice)
+		api.POST("/devices/getinitshellscripts", handler.GetInitShellScripts)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)
 		api.POST("/applications", middleware.Auth, handler.SaveApplications)
@@ -57,12 +59,14 @@ func main() {
 		api.PATCH("/devices/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", handler.GetTaskDetail)
 
-		dev := api.Group("/dev")
+		dev := api.Group("/dev", middleware.Auth)
 		{
 			dev.GET("/getDevices", handler.GetDevices)
 			dev.GET("/getScreenShot", handler.GetScreenShot)
 		}
 	}
+
+	go runUDPServer(config.Cfg.Server.UDPPort)
 
 	addr := ":" + config.Cfg.Server.Port
 	log.Printf("服务启动: http://localhost%s", addr)

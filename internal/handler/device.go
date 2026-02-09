@@ -11,6 +11,48 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// RegisterDeviceReq 设备注册请求
+type RegisterDeviceReq struct {
+	Serial string `json:"serial" binding:"required"`
+	Token  string `json:"token"`
+}
+
+// RegisterDevice 设备注册，若设备不存在则入库
+// POST /api/devices/register
+func RegisterDevice(c *gin.Context) {
+	var req RegisterDeviceReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	var device model.Device
+	err := database.DB.Where("serial = ?", req.Serial).First(&device).Error
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设备已存在", "data": device})
+		return
+	}
+
+	device = model.Device{Serial: req.Serial}
+	if err := database.DB.Create(&device).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "注册失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "注册成功", "data": device})
+}
+
+// GetInitShellScripts 获取 init shell scripts 配置
+// POST /api/devices/getinitshellscripts
+func GetInitShellScripts(c *gin.Context) {
+	var cfg model.Config
+	err := database.DB.Where("config_key = ?", "initshellscripts").First(&cfg).Error
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": ""})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cfg.Value})
+}
+
 // SearchDevices 按序列号搜索设备
 func SearchDevices(c *gin.Context) {
 	_, exists := c.Get(middleware.UserIDKey)

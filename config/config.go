@@ -31,8 +31,9 @@ type RedisConfig struct {
 }
 
 type ServerConfig struct {
-	Port string
-	Mode string
+	Port    string
+	UDPPort int
+	Mode    string
 }
 
 func Load(env string) error {
@@ -62,8 +63,9 @@ func Load(env string) error {
 			DB:       redisDB,
 		},
 		Server: ServerConfig{
-			Port: getEnv("SERVER_PORT", "8080"),
-			Mode: getEnv("GIN_MODE", "debug"),
+			Port:    getEnv("SERVER_PORT", "8080"),
+			UDPPort: getEnvInt("UDP_PORT", 8080),
+			Mode:    getEnv("GIN_MODE", "debug"),
 		},
 	}
 
@@ -78,6 +80,15 @@ func (c *MySQLConfig) DSN() string {
 func getEnv(key, defaultVal string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return defaultVal
+}
+
+func getEnvInt(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return defaultVal
 }
