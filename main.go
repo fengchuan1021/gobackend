@@ -46,7 +46,7 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	api := r.Group("/api")
+	api := r.Group("/api", middleware.Auth)
 	{
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.POST("/user/login", handler.Login)
@@ -57,7 +57,7 @@ func main() {
 		api.PATCH("/devices/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", handler.GetTaskDetail)
 
-		dev := api.Group("/dev", middleware.Auth)
+		dev := api.Group("/dev")
 		{
 			dev.GET("/getDevices", handler.GetDevices)
 			dev.GET("/getScreenShot", handler.GetScreenShot)
