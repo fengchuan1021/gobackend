@@ -9,6 +9,7 @@ import (
 	"gobackend/internal/handler"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
+	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,7 +59,7 @@ func main() {
 		api.GET("/devices", middleware.Auth, handler.SearchDevices)
 		api.PATCH("/devices/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", handler.GetTaskDetail)
-
+		api.POST("/udp/cmdcallback", handler.CmdCallback)
 		dev := api.Group("/dev", middleware.Auth)
 		{
 			dev.GET("/getDevices", handler.GetDevices)
@@ -66,7 +67,7 @@ func main() {
 		}
 	}
 
-	go runUDPServer(config.Cfg.Server.UDPPort)
+	go udpserver.Run(config.Cfg.Server.UDPPort)
 
 	addr := ":" + config.Cfg.Server.Port
 	log.Printf("服务启动: http://localhost%s", addr)

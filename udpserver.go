@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,6 +24,10 @@ const (
 var (
 	udpClients   = make(map[string]*net.UDPAddr) // serial -> addr
 	udpClientsMu sync.RWMutex
+	udpConn      *net.UDPConn
+	udpConnMu    sync.RWMutex
+	udpPending   sync.Map // msgID (uint32) -> chan []byte
+	udpNextMsgID uint32   = 1
 )
 
 func parsePacket(buf []byte) (magic uint32, length uint32, cmdType uint32, messageID uint32, payload []byte, ok bool) {
@@ -55,6 +60,11 @@ func buildPacket(cmdType uint32, messageID uint32, payload []byte) []byte {
 	return buf
 }
 
+// NextMsgID 获取下一个消息 ID
+func NextMsgID() uint32 {
+	return atomic.AddUint32(&udpNextMsgID, 1)
+}
+
 func runUDPServer(port int) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -67,6 +77,16 @@ func runUDPServer(port int) {
 		return
 	}
 	defer conn.Close()
+
+	udpConnMu.Lock()
+	udpConn = conn
+	udpConnMu.Unlock()
+	defer func() {
+		udpConnMu.Lock()
+		udpConn = nil
+		udpConnMu.Unlock()
+	}()
+
 	log.Printf("UDP server listening on :%d", port)
 
 	buf := make([]byte, 65536)
@@ -94,18 +114,29 @@ func runUDPServer(port int) {
 				udpClientsMu.Unlock()
 			}
 			hasTask := msgID
+			if hasTask == 0 {
+				//check unstarted task
+			}
 			resp := buildPacket(cmdHeartbeat, 0, nil)
 			conn.WriteToUDP(resp, from)
-			if hasTask == 0 {
-
+		case cmdAck:
+			// 忽略 ACK
+		default:
+			// 命令响应：按 msgID 投递到 channel
+			if msgID != 0 {
+				if ch, ok := udpPending.LoadAndDelete(msgID); ok {
+					select {
+					case ch.(chan []byte) <- payload:
+					default:
+					}
+				}
 			}
-
 		}
 	}
 }
 
-// SendUDPCommand 向指定序列号的设备发送 UDP 命令，并等待响应
-// msgID 由调用者传递，心跳命令传 0，非心跳命令传非 0 值
+// SendUDPCommand 向指定序列号的设备发送 UDP 命令，通过 sync.Map + channel 等待结果
+// msgID 由调用者传递（可用 NextMsgID() 获取），心跳命令传 0
 func SendUDPCommand(serial string, msgID uint32, cmdType uint32, payload []byte) ([]byte, error) {
 	udpClientsMu.RLock()
 	addr, ok := udpClients[serial]
@@ -114,67 +145,40 @@ func SendUDPCommand(serial string, msgID uint32, cmdType uint32, payload []byte)
 		return nil, fmt.Errorf("device %s not online", serial)
 	}
 
-	conn, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		return nil, err
+	udpConnMu.RLock()
+	conn := udpConn
+	udpConnMu.RUnlock()
+	if conn == nil {
+		return nil, fmt.Errorf("UDP server not ready")
 	}
-	defer conn.Close()
 
-	const ackTimeout = 3 * time.Second
+	ch := make(chan []byte, 1)
+	udpPending.Store(msgID, ch)
+	defer udpPending.Delete(msgID)
+
+	const respTimeout = 30 * time.Second
+	const ackRetryInterval = 3 * time.Second
 	const maxRetries = 3
-	var ackReceived bool
-	var respPayload []byte
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		pkt := buildPacket(cmdType, msgID, payload)
-		if _, err := conn.Write(pkt); err != nil {
+		if _, err := conn.WriteToUDP(pkt, addr); err != nil {
 			return nil, err
 		}
 
-		conn.SetReadDeadline(time.Now().Add(ackTimeout))
-		respBuf := make([]byte, 65536)
-		n, _, err := conn.ReadFromUDP(respBuf)
-		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+		select {
+		case result := <-ch:
+			return result, nil
+		case <-time.After(respTimeout):
+			if attempt < maxRetries-1 {
 				continue
 			}
-			return nil, err
-		}
-		if n < udpHeader {
-			continue
-		}
-
-		_, _, respCmd, respMsgID, pl, ok := parsePacket(respBuf[:n])
-		if !ok {
-			continue
-		}
-
-		if respCmd == cmdAck && respMsgID == msgID {
-			ackReceived = true
-			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-			n, _, err = conn.ReadFromUDP(respBuf)
-			if err != nil {
-				return nil, err
-			}
-			if n >= udpHeader {
-				_, _, _, _, respPayload, ok = parsePacket(respBuf[:n])
-				if ok {
-					return respPayload, nil
-				}
-			}
-			return nil, fmt.Errorf("no response after ack")
-		}
-
-		if respCmd == cmdType && respMsgID == msgID {
-			return pl, nil
+			return nil, fmt.Errorf("timeout after %d retries", maxRetries)
 		}
 	}
 
-	if !ackReceived {
-		return nil, fmt.Errorf("no ack after %d retries", maxRetries)
-	}
-	if respPayload != nil {
-		return respPayload, nil
-	}
 	return nil, fmt.Errorf("timeout")
+}
+func CmdCallback() {
+
 }

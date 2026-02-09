@@ -2,10 +2,13 @@ package handler
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os/exec"
 	"strings"
+
+	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,7 +41,7 @@ func GetDevices(c *gin.Context) {
 
 // GetScreenShot 根据设备序列号获取截图
 // GET /api/dev/getScreenShot?serial=xxx
-// 返回 PNG 图片流
+// 通过 UDP 向设备发送截图命令，返回 PNG 图片流
 func GetScreenShot(c *gin.Context) {
 	serial := c.Query("serial")
 	if serial == "" {
@@ -46,18 +49,28 @@ func GetScreenShot(c *gin.Context) {
 		return
 	}
 
-	// adb -s <serial> exec-out screencap -p
-	cmd := exec.Command("adb", "-s", serial, "exec-out", "screencap", "-p")
-	out, err := cmd.Output()
+	data, err := udpserver.SendCommand(serial, udpserver.CmdGetScreenshot, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "截图获取失败: " + err.Error()})
 		return
 	}
 
-	if len(out) == 0 {
+	if len(data) == 0 {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "截图为空"})
 		return
 	}
 
-	c.Data(http.StatusOK, "image/png", out)
+	// 客户端返回 base64 编码的 PNG
+	pngData, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "截图解码失败"})
+		return
+	}
+
+	if len(pngData) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "截图为空"})
+		return
+	}
+
+	c.Data(http.StatusOK, "image/png", pngData)
 }
