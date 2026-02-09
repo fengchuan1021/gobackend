@@ -1,23 +1,48 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
+	"gobackend/internal/websocket"
 
 	"github.com/gin-gonic/gin"
 )
 
+// AppendLogReq 追加日志请求
+type AppendLogReq struct {
+	Serial  string `json:"serial" binding:"required"`
+	Level   string `json:"level"`
+	Message string `json:"message"`
+	At      string `json:"at"`
+}
+
+// AppendLog 接收客户端日志，按 serial 存入内存，每设备最多 5000 条，超过则丢弃最早 2500 条
+// POST /api/devices/appendLog
 func AppendLog(c *gin.Context) {
 	var req AppendLogReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if req.Level == "" {
+		req.Level = "info"
+	}
+	//devicelog.DefaultStore.Append(req.Serial, req.Level, req.Message, req.At)
 
+	// 广播给监控该设备的 WebSocket 客户端
+	if websocket.DefaultHub != nil {
+		payload, _ := json.Marshal(map[string]string{
+			"level": req.Level, "message": req.Message, "at": req.At,
+		})
+		websocket.DefaultHub.BroadcastToMonitor(req.Serial, payload)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0})
 }
 
 // RegisterDeviceReq 设备注册请求

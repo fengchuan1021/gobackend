@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -51,7 +52,12 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		_ = message // 可在此处理客户端消息
+		var msg struct {
+			MonitorSerial string `json:"monitor_serial"`
+		}
+		if err := json.Unmarshal(message, &msg); err == nil && msg.MonitorSerial != "" {
+			c.SetMonitorSerial(msg.MonitorSerial)
+		}
 	}
 }
 

@@ -50,6 +50,7 @@ func main() {
 
 	// WebSocket
 	wsHub := websocket.NewHub()
+	websocket.DefaultHub = wsHub
 	go wsHub.Run()
 	r.GET("/ws", websocket.Handle(wsHub))
 

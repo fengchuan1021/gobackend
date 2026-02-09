@@ -9,9 +9,11 @@ import (
 
 // Client 表示一个 WebSocket 连接
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	hub           *Hub
+	conn          *websocket.Conn
+	send          chan []byte
+	monitorSerial string
+	monitorMu     sync.RWMutex
 }
 
 // Hub 管理所有 WebSocket 连接
@@ -66,7 +68,37 @@ func (h *Hub) Run() {
 	}
 }
 
-// Broadcast 向所有连接广播消息
-func (h *Hub) Broadcast(data []byte) {
-	h.broadcast <- data
+// SetMonitorSerial 设置客户端要监控的设备 serial
+func (c *Client) SetMonitorSerial(serial string) {
+	c.monitorMu.Lock()
+	defer c.monitorMu.Unlock()
+	c.monitorSerial = serial
+}
+
+// GetMonitorSerial 获取客户端监控的 serial
+func (c *Client) GetMonitorSerial() string {
+	c.monitorMu.RLock()
+	defer c.monitorMu.RUnlock()
+	return c.monitorSerial
+}
+
+// DefaultHub 默认 Hub 实例，main 中设置
+var DefaultHub *Hub
+
+// BroadcastToMonitor 向所有监控指定 serial 的客户端发送消息
+func (h *Hub) BroadcastToMonitor(serial string, data []byte) {
+	if serial == "" {
+		return
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.GetMonitorSerial() == serial {
+			select {
+			case client.send <- data:
+			default:
+				// 发送缓冲区满，跳过
+			}
+		}
+	}
 }
