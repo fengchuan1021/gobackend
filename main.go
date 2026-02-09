@@ -10,6 +10,7 @@ import (
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
 	"gobackend/internal/udpserver"
+	"gobackend/internal/websocket"
 
 	"github.com/gin-gonic/gin"
 )
@@ -47,11 +48,17 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	// WebSocket
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+	r.GET("/ws", websocket.Handle(wsHub))
+
 	api := r.Group("/api")
 	{
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.POST("/user/login", handler.Login)
 		api.POST("/devices/register", handler.RegisterDevice)
+		api.POST("/devices/appendLog", handler.AppendLog)
 		api.POST("/devices/getinitshellscripts", handler.GetInitShellScripts)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)

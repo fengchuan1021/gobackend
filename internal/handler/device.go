@@ -11,6 +11,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func AppendLog(c *gin.Context) {
+	var req AppendLogReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+}
+
 // RegisterDeviceReq 设备注册请求
 type RegisterDeviceReq struct {
 	Serial string `json:"serial" binding:"required"`
@@ -78,8 +87,8 @@ func SearchDevices(c *gin.Context) {
 
 // UpdateDeviceReq 更新设备请求
 type UpdateDeviceReq struct {
-	Username   string  `json:"username"`
-	ExpireAt   *string `json:"expire_at"`   // ISO8601 如 2025-12-31，null 表示清除到期时间
+	Username string  `json:"username"`
+	ExpireAt *string `json:"expire_at"` // ISO8601 如 2025-12-31，null 表示清除到期时间
 }
 
 // UpdateDevice 更新设备（绑定用户、到期时间）
