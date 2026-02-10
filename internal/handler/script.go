@@ -65,3 +65,92 @@ func GetScriptsTree(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
+
+// ListScriptCategories 脚本分类列表（管理端）
+func ListScriptCategories(c *gin.Context) {
+	var list []model.ScriptCategory
+	err := database.DB.Order("sort_order ASC").Find(&list).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": list})
+}
+
+// CreateScriptCategoryReq 创建/更新分类请求
+type CreateScriptCategoryReq struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+	IsNew       bool   `json:"is_new"`
+	IsHot       bool   `json:"is_hot"`
+	SortOrder   int    `json:"sort_order"`
+}
+
+// CreateScriptCategory 创建脚本分类
+func CreateScriptCategory(c *gin.Context) {
+	var req CreateScriptCategoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	cat := model.ScriptCategory{
+		Name:        req.Name,
+		Description: req.Description,
+		IsNew:       req.IsNew,
+		IsHot:       req.IsHot,
+		SortOrder:   req.SortOrder,
+	}
+	if err := database.DB.Create(&cat).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cat})
+}
+
+// UpdateScriptCategory 更新脚本分类
+func UpdateScriptCategory(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var req CreateScriptCategoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var cat model.ScriptCategory
+	if err := database.DB.First(&cat, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "分类不存在"})
+		return
+	}
+	cat.Name = req.Name
+	cat.Description = req.Description
+	cat.IsNew = req.IsNew
+	cat.IsHot = req.IsHot
+	cat.SortOrder = req.SortOrder
+	if err := database.DB.Save(&cat).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cat})
+}
+
+// DeleteScriptCategory 删除脚本分类（软删）
+func DeleteScriptCategory(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	result := database.DB.Delete(&model.ScriptCategory{}, id)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "分类不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0})
+}

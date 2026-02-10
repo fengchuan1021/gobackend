@@ -21,16 +21,32 @@ const (
 
 // ApplicationItem 应用项
 type ApplicationItem struct {
-	PackageName string `json:"packageName" binding:"required"`
-	Name        string `json:"name"`
-	IconBase64  string `json:"iconBase64"`
-	ToClean     bool   `json:"toClean"`
-	BackupData  bool   `json:"backupData"`
+	PackageName      string `json:"packageName" binding:"required"`
+	Name             string `json:"name"`
+	IconBase64       string `json:"iconBase64"`
+	ToClean          bool   `json:"toClean"`
+	BackupData       bool   `json:"backupData"`
+	ScriptCategoryID uint   `json:"script_category_id"`
 }
 
 // SaveApplicationsReq 保存应用请求
 type SaveApplicationsReq struct {
 	Apps []ApplicationItem `json:"apps" binding:"required"`
+}
+
+// ListApplications 获取应用列表（管理端合并已保存的配置用）
+func ListApplications(c *gin.Context) {
+	_, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	var list []model.Application
+	if err := database.DB.Order("id ASC").Find(&list).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": list})
 }
 
 // SaveApplications 保存应用配置
@@ -57,14 +73,16 @@ func SaveApplications(c *gin.Context) {
 			existing.IconPath = iconPath
 			existing.ToClean = app.ToClean
 			existing.BackupData = app.BackupData
+			existing.ScriptCategoryID = app.ScriptCategoryID
 			database.DB.Save(&existing)
 		} else {
 			database.DB.Create(&model.Application{
-				PackageName: app.PackageName,
-				Name:        app.Name,
-				IconPath:    iconPath,
-				ToClean:     app.ToClean,
-				BackupData:  app.BackupData,
+				PackageName:      app.PackageName,
+				Name:             app.Name,
+				IconPath:         iconPath,
+				ToClean:          app.ToClean,
+				BackupData:       app.BackupData,
+				ScriptCategoryID: app.ScriptCategoryID,
 			})
 		}
 	}
