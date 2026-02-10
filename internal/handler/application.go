@@ -21,12 +21,11 @@ const (
 
 // ApplicationItem 应用项
 type ApplicationItem struct {
-	PackageName      string `json:"packageName" binding:"required"`
-	Name             string `json:"name"`
-	IconBase64       string `json:"iconBase64"`
-	ToClean          bool   `json:"toClean"`
-	BackupData       bool   `json:"backupData"`
-	ScriptCategoryID uint   `json:"script_category_id"`
+	PackageName string `json:"packageName" binding:"required"`
+	Name        string `json:"name"`
+	IconBase64  string `json:"iconBase64"`
+	ToClean     bool   `json:"toClean"`
+	BackupData  bool   `json:"backupData"`
 }
 
 // SaveApplicationsReq 保存应用请求
@@ -73,16 +72,15 @@ func SaveApplications(c *gin.Context) {
 			existing.IconPath = iconPath
 			existing.ToClean = app.ToClean
 			existing.BackupData = app.BackupData
-			existing.ScriptCategoryID = app.ScriptCategoryID
+
 			database.DB.Save(&existing)
 		} else {
 			database.DB.Create(&model.Application{
-				PackageName:      app.PackageName,
-				Name:             app.Name,
-				IconPath:         iconPath,
-				ToClean:          app.ToClean,
-				BackupData:       app.BackupData,
-				ScriptCategoryID: app.ScriptCategoryID,
+				PackageName: app.PackageName,
+				Name:        app.Name,
+				IconPath:    iconPath,
+				ToClean:     app.ToClean,
+				BackupData:  app.BackupData,
 			})
 		}
 	}
@@ -91,13 +89,17 @@ func SaveApplications(c *gin.Context) {
 }
 
 // saveIconToFile 将 base64 图标保存到 wwwroot/images/appicon，返回相对路径
+// 根据 data URL 的 MIME 保存为 .png 或 .jpg，PNG 可保留透明通道，避免 JPG 导致黑边
 func saveIconToFile(packageName, iconBase64 string) string {
 	if iconBase64 == "" {
 		return ""
 	}
-	// 支持 data:image/jpeg;base64,xxx 格式
-	idx := strings.Index(iconBase64, ",")
-	if idx >= 0 {
+	ext := ".jpg"
+	if idx := strings.Index(iconBase64, ","); idx >= 0 {
+		mime := strings.ToLower(strings.TrimSpace(iconBase64[:idx]))
+		if strings.Contains(mime, "image/png") {
+			ext = ".png"
+		}
 		iconBase64 = iconBase64[idx+1:]
 	}
 	data, err := base64.StdEncoding.DecodeString(iconBase64)
@@ -109,7 +111,7 @@ func saveIconToFile(packageName, iconBase64 string) string {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return ""
 	}
-	filename := strings.ReplaceAll(packageName, ".", "_") + ".jpg"
+	filename := strings.ReplaceAll(packageName, ".", "_") + ext
 	fullPath := filepath.Join(dir, filename)
 	if err := os.WriteFile(fullPath, data, 0644); err != nil {
 		return ""

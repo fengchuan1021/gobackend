@@ -66,6 +66,146 @@ func GetScriptsTree(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
+// GetScript 获取单个脚本（含 content，管理端/加载用）
+func GetScript(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var s model.Script
+	if err := database.DB.First(&s, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "脚本不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": s})
+}
+
+// ListScripts 脚本列表（管理端，不含 content）
+func ListScripts(c *gin.Context) {
+	var list []model.Script
+	err := database.DB.Select("id", "name", "icon_url", "category_id", "description", "package_name", "created_at", "updated_at").
+		Order("id desc").Find(&list).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": list})
+}
+
+// UpdateScriptCategoryReq 仅更新脚本分类请求
+type UpdateScriptCategoryReq struct {
+	CategoryID uint `json:"category_id" binding:"required"`
+}
+
+// UpdateScriptCategoryOnly 更新脚本的分类（管理端）
+func UpdateScriptCategoryOnly(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var req UpdateScriptCategoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	result := database.DB.Model(&model.Script{}).Where("id = ?", id).Update("category_id", req.CategoryID)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "脚本不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0})
+}
+
+// CreateScriptReq 创建脚本请求
+type CreateScriptReq struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+	CategoryID  uint   `json:"category_id" binding:"required"`
+	Content     string `json:"content"`
+	PackageName string `json:"package_name"`
+	IconURL     string `json:"icon_url"`
+}
+
+// CreateScript 创建脚本
+func CreateScript(c *gin.Context) {
+	var req CreateScriptReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	s := model.Script{
+		Name:        req.Name,
+		Description: req.Description,
+		CategoryID:  req.CategoryID,
+		Content:     req.Content,
+		PackageName: req.PackageName,
+		IconURL:     req.IconURL,
+	}
+	if err := database.DB.Create(&s).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": s})
+}
+
+// UpdateScriptReq 更新脚本请求（字段均可选）
+type UpdateScriptReq struct {
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	CategoryID  *uint   `json:"category_id"`
+	Content     *string `json:"content"`
+	PackageName *string `json:"package_name"`
+	IconURL     *string `json:"icon_url"`
+}
+
+// UpdateScript 更新脚本
+func UpdateScript(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var req UpdateScriptReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var s model.Script
+	if err := database.DB.First(&s, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "脚本不存在"})
+		return
+	}
+	if req.Name != nil {
+		s.Name = *req.Name
+	}
+	if req.Description != nil {
+		s.Description = *req.Description
+	}
+	if req.CategoryID != nil {
+		s.CategoryID = *req.CategoryID
+	}
+	if req.Content != nil {
+		s.Content = *req.Content
+	}
+	if req.PackageName != nil {
+		s.PackageName = *req.PackageName
+	}
+	if req.IconURL != nil {
+		s.IconURL = *req.IconURL
+	}
+	if err := database.DB.Save(&s).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": s})
+}
+
 // ListScriptCategories 脚本分类列表（管理端）
 func ListScriptCategories(c *gin.Context) {
 	var list []model.ScriptCategory

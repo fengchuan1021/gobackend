@@ -17,8 +17,8 @@ type Script struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
-
-	Category ScriptCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	PackageName string         `gorm:"type:varchar(255);not null" json:"package_name"`
+	Category    ScriptCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
 }
 
 // TableName 指定表名
