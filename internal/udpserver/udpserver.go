@@ -11,14 +11,15 @@ import (
 )
 
 const (
-	Magic             = 0x53434F52 // "SCOR"
-	HeaderSize        = 16
-	CmdHeartbeat      = 0
-	CmdGetScreenshot  = 1
-	CmdGetXmlLayout   = 2
-	CmdSetToken       = 3
-	CmdExecuteCommand = 4
-	CmdAck            = 5
+	Magic               = 0x53434F52 // "SCOR"
+	HeaderSize          = 16
+	CmdHeartbeat        = 0
+	CmdGetScreenshot    = 1
+	CmdGetXmlLayout     = 2
+	CmdSetToken         = 3
+	CmdExecuteCommand   = 4
+	CmdAck              = 5
+	CmdExecuteDevScript = 6
 )
 
 var (

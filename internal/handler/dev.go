@@ -2,16 +2,24 @@ package handler
 
 import (
 	"bufio"
+	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os/exec"
 	"strings"
+	"time"
 
+	"gobackend/internal/database"
 	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
 )
+
+const devScriptKeyPrefix = "dev_script:"
+const devScriptTTL = 20 * time.Second
 
 // GetDevices 获取已连接的设备列表（adb devices）
 // GET /api/dev/getDevices
@@ -73,4 +81,59 @@ func GetScreenShot(c *gin.Context) {
 	}
 
 	c.Data(http.StatusOK, "image/png", pngData)
+}
+
+// RunDevScriptReq 执行设备脚本请求
+type RunDevScriptReq struct {
+	Serial string `json:"serial" binding:"required"`
+	Script string `json:"script" binding:"required"`
+}
+
+// RunDevScript 在指定设备上执行脚本：生成 script_id 存 Redis（20s 过期），UDP 下发 script_id；设备凭 script_id HTTP 拉取脚本内容后执行
+// POST /api/dev/runDevScript
+func RunDevScript(c *gin.Context) {
+	var req RunDevScriptReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，需 serial 与 script"})
+		return
+	}
+
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成 script_id 失败"})
+		return
+	}
+	scriptID := hex.EncodeToString(b)
+	key := devScriptKeyPrefix + scriptID
+	ctx := context.Background()
+	if err := database.RDB.Set(ctx, key, req.Script, devScriptTTL).Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入脚本缓存失败"})
+		return
+	}
+
+	data, err := udpserver.SendCommand(req.Serial, udpserver.CmdExecuteDevScript, []byte(scriptID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "执行脚本失败: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": string(data)})
+}
+
+// GetDevScriptContent 根据 script_id 从 Redis 返回脚本内容（设备拉取后执行），未找到或已过期返回 404
+// GET /api/dev/getDevScriptContent/:id（可不鉴权，script_id 不可猜测且 20s 过期）
+func GetDevScriptContent(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id 参数必填"})
+		return
+	}
+	key := devScriptKeyPrefix + id
+	ctx := context.Background()
+	content, err := database.RDB.Get(ctx, key).Result()
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "脚本不存在或已过期"})
+		return
+	}
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(content))
 }
