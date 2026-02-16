@@ -122,6 +122,25 @@ func UpdateScriptCategoryOnly(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0})
 }
 
+// DeleteScript 删除脚本（软删）
+func DeleteScript(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	result := database.DB.Delete(&model.Script{}, id)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "脚本不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0})
+}
+
 // CreateScriptReq 创建脚本请求
 type CreateScriptReq struct {
 	Name        string `json:"name" binding:"required"`
@@ -281,6 +300,15 @@ func DeleteScriptCategory(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var count int64
+	if err := database.DB.Model(&model.Script{}).Where("category_id = ?", id).Count(&count).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if count > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该分类下还有脚本，请先移动或删除脚本后再删除分类"})
 		return
 	}
 	result := database.DB.Delete(&model.ScriptCategory{}, id)

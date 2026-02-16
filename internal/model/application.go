@@ -2,21 +2,18 @@ package model
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // Application 应用配置模型（用户勾选的清理/备份选项）
 type Application struct {
-	ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	PackageName string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"package_name"`
-	Name        string         `gorm:"type:varchar(255);not null" json:"name"`
-	IconPath    string         `gorm:"type:varchar(512)" json:"icon_path"` // 相对于 wwwroot 的路径，如 images/appicon/xxx.jpg
-	ToClean     bool           `gorm:"default:false" json:"to_clean"`
-	BackupData  bool           `gorm:"default:false" json:"backup_data"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	PackageName string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"package_name"`
+	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
+	IconPath    string    `gorm:"type:varchar(512)" json:"icon_path"` // 相对于 wwwroot 的路径，如 images/appicon/xxx.jpg
+	ToClean     bool      `gorm:"default:false" json:"to_clean"`
+	BackupData  bool      `gorm:"default:false" json:"backup_data"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // TableName 指定表名
