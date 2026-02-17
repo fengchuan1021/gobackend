@@ -137,3 +137,19 @@ func GetDevScriptContent(c *gin.Context) {
 	}
 	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(content))
 }
+
+// GetXmlLayout 根据设备序列号获取 XML 布局
+// GET /api/dev/getXmlLayout?serial=xxx
+func GetXmlLayout(c *gin.Context) {
+	serial := c.Query("serial")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serial 参数必填"})
+		return
+	}
+	data, err := udpserver.SendCommand(serial, udpserver.CmdGetXmlLayout, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取 XML 布局失败: " + err.Error()})
+		return
+	}
+	c.String(http.StatusOK, string(data))
+}

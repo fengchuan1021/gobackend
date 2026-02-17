@@ -85,6 +85,7 @@ func main() {
 		{
 			dev.GET("/getDevices", handler.GetDevices)
 			dev.GET("/getScreenShot", handler.GetScreenShot)
+			dev.GET("/getXmlLayout", handler.GetXmlLayout)
 			dev.POST("/runDevScript", handler.RunDevScript)
 		}
 	}
