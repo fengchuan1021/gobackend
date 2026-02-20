@@ -13,33 +13,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AppendLogReq 追加日志请求
-type AppendLogReq struct {
-	Serial  string `json:"serial" binding:"required"`
-	Level   string `json:"level"`
-	Message string `json:"message"`
-	At      string `json:"at"`
-}
-
-// AppendLog 接收客户端日志，按 serial 存入内存，每设备最多 5000 条，超过则丢弃最早 2500 条
-// POST /api/devices/appendLog
+// AppendLog 接收客户端日志：路径参数 serial，请求体为消息内容，转发给 WebSocket
+// POST /api/devices/:serial/appendLog
 func AppendLog(c *gin.Context) {
-	var req AppendLogReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+	serial := c.Param("serial")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 serial"})
 		return
 	}
-	if req.Level == "" {
-		req.Level = "info"
+	body, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "读取请求体失败"})
+		return
 	}
-	//devicelog.DefaultStore.Append(req.Serial, req.Level, req.Message, req.At)
+	message := string(body)
 
-	// 广播给监控该设备的 WebSocket 客户端
 	if websocket.DefaultHub != nil {
+		at := time.Now().Format(time.RFC3339)
 		payload, _ := json.Marshal(map[string]string{
-			"level": req.Level, "message": req.Message, "at": req.At,
+			"level": "info", "message": message, "at": at,
 		})
-		websocket.DefaultHub.BroadcastToMonitor(req.Serial, payload)
+		websocket.DefaultHub.BroadcastToMonitor(serial, payload)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0})

@@ -69,7 +69,7 @@ func main() {
 		api.DELETE("/script_categories/:id", middleware.Auth, handler.DeleteScriptCategory)
 		api.POST("/user/login", handler.Login)
 		api.POST("/devices/register", handler.RegisterDevice)
-		api.POST("/devices/appendLog", handler.AppendLog)
+		api.POST("/devices/:serial/appendLog", handler.AppendLog)
 		api.POST("/devices/getinitshellscripts", handler.GetInitShellScripts)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)
