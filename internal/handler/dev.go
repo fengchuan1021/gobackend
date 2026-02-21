@@ -106,7 +106,7 @@ func RunDevScript(c *gin.Context) {
 	scriptID := hex.EncodeToString(b)
 	key := devScriptKeyPrefix + scriptID
 	ctx := context.Background()
-	if err := database.RDB.Set(ctx, key, req.Script, devScriptTTL).Err(); err != nil {
+	if err := database.RDB.Set(ctx, key, "enablelog();\n"+req.Script, devScriptTTL).Err(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入脚本缓存失败"})
 		return
 	}

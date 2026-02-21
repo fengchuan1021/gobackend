@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"gobackend/internal/aes_utils"
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
@@ -48,14 +49,23 @@ type RegisterDeviceReq struct {
 // RegisterDevice 设备注册，若设备不存在则入库
 // POST /api/devices/register
 func RegisterDevice(c *gin.Context) {
+	var aes_req aes_utils.Aes_request
 	var req RegisterDeviceReq
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&aes_req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-
+	data, err := aes_utils.Decrypt(aes_req.Data)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "decrypt failed"})
+		return
+	}
+	if err := json.Unmarshal([]byte(data), &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "unmarshal failed"})
+		return
+	}
 	var device model.Device
-	err := database.DB.Where("serial = ?", req.Serial).First(&device).Error
+	err = database.DB.Where("serial = ?", req.Serial).First(&device).Error
 	if err == nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设备已存在", "data": device})
 		return
