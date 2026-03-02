@@ -2,12 +2,31 @@ package handler
 
 import (
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
 
 	"gobackend/internal/database"
 	"gobackend/internal/model"
 
 	"github.com/gin-gonic/gin"
 )
+
+const (
+	goScriptsBaseDir = "/root/scorpio"
+	qjscPath         = "/root/antares/quickjs/qjsc"
+	commonJSRel      = "antares_scripts/common.js"
+)
+
+type goScriptCacheEntry struct {
+	Content    []byte
+	CompiledAt time.Time
+}
+
+var goScriptCache sync.Map
 
 // ScriptListItem 脚本列表项（不含 content）
 type ScriptListItem struct {
@@ -171,6 +190,88 @@ func CreateScript(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": s})
+}
+
+func GetGoScripts(c *gin.Context) {
+	fileName := strings.TrimPrefix(c.Param("file_name"), "/")
+	if fileName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	baseDir, err := filepath.Abs(goScriptsBaseDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "配置错误"})
+		return
+	}
+	// 解析路径并限制在 baseDir 下，防止路径穿越
+	joined := filepath.Join(baseDir, fileName)
+	cleanPath := filepath.Clean(joined)
+	if !strings.HasPrefix(cleanPath, baseDir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "路径非法"})
+		return
+	}
+	if !strings.HasSuffix(strings.ToLower(cleanPath), ".js") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "仅支持 .js 文件"})
+		return
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+		return
+	}
+	if info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能是目录"})
+		return
+	}
+	sourceModTime := info.ModTime()
+
+	// 缓存 key 使用相对于 baseDir 的路径
+	relPath, _ := filepath.Rel(baseDir, cleanPath)
+	if relPath == "" || relPath == "." {
+		relPath = fileName
+	} else {
+		relPath = filepath.ToSlash(relPath)
+	}
+
+	if v, ok := goScriptCache.Load(relPath); ok {
+		entry := v.(*goScriptCacheEntry)
+		// 源文件的更新时间小于等于缓存编译时间则直接返回缓存
+		if !sourceModTime.After(entry.CompiledAt) {
+			c.Data(http.StatusOK, "text/x-csrc; charset=utf-8", entry.Content)
+			return
+		}
+	}
+
+	// 输出 .c 路径：同目录下同名 .c
+	outPath := cleanPath[:len(cleanPath)-3] + ".c"
+	relOut := filepath.ToSlash(filepath.Join(filepath.Dir(relPath), filepath.Base(cleanPath[:len(cleanPath)-3])+".c"))
+	//relCommon := filepath.ToSlash(commonJSRel)
+	relSrc := filepath.ToSlash(relPath)
+
+	cmd := exec.Command(qjscPath, "-o", relOut, "-m", "-s", "-c", relSrc)
+	cmd.Dir = baseDir
+	cmd.Stderr = nil
+	if err := cmd.Run(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "编译失败", "detail": err.Error()})
+		return
+	}
+
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取编译结果失败"})
+		return
+	}
+
+	compiledAt := time.Now()
+	goScriptCache.Store(relPath, &goScriptCacheEntry{Content: content, CompiledAt: compiledAt})
+
+	c.Data(http.StatusOK, "text/x-csrc; charset=utf-8", content)
 }
 
 // UpdateScriptReq 更新脚本请求（字段均可选）
