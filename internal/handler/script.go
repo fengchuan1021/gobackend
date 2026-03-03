@@ -1,10 +1,14 @@
 package handler
 
 import (
+	"bytes"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,8 +20,8 @@ import (
 )
 
 const (
-	goScriptsBaseDir = "/root/scorpio"
-	qjscPath         = "/root/antares/quickjs/qjsc"
+	goScriptsBaseDir = "/root/scorpio/antares_scripts"
+	qjscPath         = "/root/scorpio/antares/quickjs/qjsc"
 	commonJSRel      = "antares_scripts/common.js"
 )
 
@@ -27,6 +31,43 @@ type goScriptCacheEntry struct {
 }
 
 var goScriptCache sync.Map
+
+// sizeRe 匹配 const uint32_t qjsc_xxx_size = N;
+var sizeRe = regexp.MustCompile(`const uint32_t qjsc_\w+_size\s*=\s*(\d+)\s*;`)
+var hexRe = regexp.MustCompile(`0x[0-9a-fA-F]{2}`)
+
+// extractBytecodeFromC 从 qjsc 生成的 .c 源码中解析出 qjsc_* 数组的二进制内容，返回最后一个数组的字节（主脚本 bytecode）
+func extractBytecodeFromC(cSource []byte) ([]byte, error) {
+	sizes := sizeRe.FindAllSubmatch(cSource, -1)
+	if len(sizes) == 0 {
+		return nil, fmt.Errorf("no qjsc_*_size found in C source")
+	}
+	// 找最后一个 size，对应主脚本
+	lastSize := sizes[len(sizes)-1]
+	n, err := strconv.Atoi(string(lastSize[1]))
+	if err != nil || n <= 0 {
+		return nil, fmt.Errorf("invalid size in C source")
+	}
+	// 找所有 0xXX 出现的位置，从最后一个 size 声明之后开始收集，取前 n 个
+	idx := bytes.LastIndex(cSource, lastSize[0])
+	if idx < 0 {
+		return nil, fmt.Errorf("size line not found")
+	}
+	afterSize := cSource[idx+len(lastSize[0]):]
+	hexMatches := hexRe.FindAll(afterSize, -1)
+	if len(hexMatches) < n {
+		return nil, fmt.Errorf("not enough bytes in C array (need %d, got %d)", n, len(hexMatches))
+	}
+	out := make([]byte, 0, n)
+	for i := 0; i < n && i < len(hexMatches); i++ {
+		v, err := strconv.ParseUint(string(hexMatches[i][2:]), 16, 8)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, byte(v))
+	}
+	return out, nil
+}
 
 // ScriptListItem 脚本列表项（不含 content）
 type ScriptListItem struct {
@@ -194,6 +235,7 @@ func CreateScript(c *gin.Context) {
 
 func GetGoScripts(c *gin.Context) {
 	fileName := strings.TrimPrefix(c.Param("file_name"), "/")
+	fmt.Println("fileName", fileName)
 	if fileName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
@@ -207,6 +249,7 @@ func GetGoScripts(c *gin.Context) {
 	// 解析路径并限制在 baseDir 下，防止路径穿越
 	joined := filepath.Join(baseDir, fileName)
 	cleanPath := filepath.Clean(joined)
+	fmt.Println("cleanPath", cleanPath)
 	if !strings.HasPrefix(cleanPath, baseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "路径非法"})
 		return
@@ -219,6 +262,7 @@ func GetGoScripts(c *gin.Context) {
 	info, err := os.Stat(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			fmt.Println("file not exist", cleanPath)
 			c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
 			return
 		}
@@ -226,6 +270,7 @@ func GetGoScripts(c *gin.Context) {
 		return
 	}
 	if info.IsDir() {
+		fmt.Println("file is a directory", cleanPath)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不能是目录"})
 		return
 	}
@@ -238,40 +283,50 @@ func GetGoScripts(c *gin.Context) {
 	} else {
 		relPath = filepath.ToSlash(relPath)
 	}
-
+	fmt.Println("relPath", relPath)
 	if v, ok := goScriptCache.Load(relPath); ok {
 		entry := v.(*goScriptCacheEntry)
-		// 源文件的更新时间小于等于缓存编译时间则直接返回缓存
+		// 源文件的更新时间小于等于缓存编译时间则直接返回缓存（缓存的是字节码二进制）
 		if !sourceModTime.After(entry.CompiledAt) {
-			c.Data(http.StatusOK, "text/x-csrc; charset=utf-8", entry.Content)
+			c.Data(http.StatusOK, "application/octet-stream", entry.Content)
 			return
 		}
 	}
 
-	// 输出 .c 路径：同目录下同名 .c
-	outPath := cleanPath[:len(cleanPath)-3] + ".c"
+	// 输出 .c 路径：同目录下同名 .c（相对 baseDir）
 	relOut := filepath.ToSlash(filepath.Join(filepath.Dir(relPath), filepath.Base(cleanPath[:len(cleanPath)-3])+".c"))
-	//relCommon := filepath.ToSlash(commonJSRel)
+	absOut := filepath.Join(baseDir, relOut)
+	fmt.Println("relOut", relOut)
+
 	relSrc := filepath.ToSlash(relPath)
 
 	cmd := exec.Command(qjscPath, "-o", relOut, "-m", "-s", "-c", relSrc)
+	fmt.Println("cmd", cmd.String())
 	cmd.Dir = baseDir
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
+		fmt.Println("compile failed", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "编译失败", "detail": err.Error()})
 		return
 	}
 
-	content, err := os.ReadFile(outPath)
+	cSource, err := os.ReadFile(absOut)
+	fmt.Println("cSource", string(cSource))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取编译结果失败"})
 		return
 	}
 
-	compiledAt := time.Now()
-	goScriptCache.Store(relPath, &goScriptCacheEntry{Content: content, CompiledAt: compiledAt})
+	bytecode, err := extractBytecodeFromC(cSource)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解析编译结果失败", "detail": err.Error()})
+		return
+	}
 
-	c.Data(http.StatusOK, "text/x-csrc; charset=utf-8", content)
+	compiledAt := time.Now()
+	goScriptCache.Store(relPath, &goScriptCacheEntry{Content: bytecode, CompiledAt: compiledAt})
+
+	c.Data(http.StatusOK, "application/octet-stream", bytecode)
 }
 
 // UpdateScriptReq 更新脚本请求（字段均可选）

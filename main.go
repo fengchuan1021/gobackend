@@ -53,7 +53,7 @@ func main() {
 	websocket.DefaultHub = wsHub
 	go wsHub.Run()
 	r.GET("/ws", websocket.Handle(wsHub))
-
+	r.GET("/go_scripts/*file_name", handler.GetGoScripts)
 	api := r.Group("/api")
 	{
 		api.GET("/scripts_tree", handler.GetScriptsTree)
@@ -64,7 +64,7 @@ func main() {
 		api.PATCH("/scripts/:id/category", middleware.Auth, handler.UpdateScriptCategoryOnly)
 		api.DELETE("/scripts/:id", middleware.Auth, handler.DeleteScript)
 		api.GET("/script_categories", middleware.Auth, handler.ListScriptCategories)
-		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
+
 		api.POST("/script_categories", middleware.Auth, handler.CreateScriptCategory)
 		api.PATCH("/script_categories/:id", middleware.Auth, handler.UpdateScriptCategory)
 		api.DELETE("/script_categories/:id", middleware.Auth, handler.DeleteScriptCategory)
