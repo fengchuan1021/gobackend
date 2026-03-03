@@ -15,7 +15,7 @@ import (
 )
 
 // AppendLog 接收客户端日志：路径参数 serial，请求体为消息内容，转发给 WebSocket
-// POST /api/devices/:serial/appendLog
+// POST /api/devices/:serial/appendLog?tag=test
 func AppendLog(c *gin.Context) {
 	serial := c.Param("serial")
 	if serial == "" {
@@ -30,9 +30,13 @@ func AppendLog(c *gin.Context) {
 	message := string(body)
 
 	if websocket.DefaultHub != nil {
+		tag := c.Query("tag")
+		if tag == "" {
+			tag = "info"
+		}
 		at := time.Now().Format(time.RFC3339)
 		payload, _ := json.Marshal(map[string]string{
-			"level": "info", "message": message, "at": at,
+			"level": tag, "message": message, "at": at,
 		})
 		websocket.DefaultHub.BroadcastToMonitor(serial, payload)
 	}
