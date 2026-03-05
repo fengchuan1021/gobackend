@@ -10,7 +10,7 @@ type Script struct {
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
 	IconURL     string    `gorm:"type:varchar(512)" json:"icon_url"`
 	CategoryID  uint      `gorm:"index;not null" json:"category_id"`
-	Content     string    `gorm:"type:longtext" json:"content"`
+	FilePath    string    `gorm:"type:varchar(255);" json:"file_path"`
 	Description string    `gorm:"type:text" json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

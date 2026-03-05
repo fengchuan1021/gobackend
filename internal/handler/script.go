@@ -206,7 +206,7 @@ type CreateScriptReq struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 	CategoryID  uint   `json:"category_id" binding:"required"`
-	Content     string `json:"content"`
+	FilePath    string `json:"file_path"`
 	PackageName string `json:"package_name"`
 	IconURL     string `json:"icon_url"`
 }
@@ -222,7 +222,7 @@ func CreateScript(c *gin.Context) {
 		Name:        req.Name,
 		Description: req.Description,
 		CategoryID:  req.CategoryID,
-		Content:     req.Content,
+		FilePath:    req.FilePath,
 		PackageName: req.PackageName,
 		IconURL:     req.IconURL,
 	}
@@ -334,7 +334,7 @@ type UpdateScriptReq struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
 	CategoryID  *uint   `json:"category_id"`
-	Content     *string `json:"content"`
+	FilePath    *string `json:"file_path"`
 	PackageName *string `json:"package_name"`
 	IconURL     *string `json:"icon_url"`
 }
@@ -365,8 +365,8 @@ func UpdateScript(c *gin.Context) {
 	if req.CategoryID != nil {
 		s.CategoryID = *req.CategoryID
 	}
-	if req.Content != nil {
-		s.Content = *req.Content
+	if req.FilePath != nil {
+		s.FilePath = *req.FilePath
 	}
 	if req.PackageName != nil {
 		s.PackageName = *req.PackageName
