@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"gobackend/internal/base21"
 	"gobackend/internal/database"
 	"gobackend/internal/model"
 
@@ -40,12 +41,26 @@ func GetTaskDetail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "read file failed"})
 		return
 	}
+	scriptEncoded := base21.EncodeToString(content)
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"msg":  "ok",
 		"data": gin.H{
-			"script": string(content),
+			"script": scriptEncoded,
 			"task":   task,
 		},
 	})
+}
+
+type ClientAddTaskReq struct {
+	ScriptID int                    `json:"script_id" binding:"required"`
+	Params   map[string]interface{} `json:"params" binding:"required"`
+}
+
+func ClientAddTask(c *gin.Context) {
+	var req ClientAddTaskReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "task_id is required"})
+		return
+	}
 }

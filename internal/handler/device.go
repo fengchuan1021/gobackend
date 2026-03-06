@@ -185,3 +185,27 @@ func UpdateDevice(c *gin.Context) {
 	database.DB.First(&device, device.ID)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "更新成功", "data": device})
 }
+
+// GetTrickStoreConfig 获取 trick store config
+// POST /api/device/gettrickeystoreconfig
+func GetTrickStoreConfig(c *gin.Context) {
+	var cfg model.Config
+	err := database.DB.Where("config_key = ?", "trickeystoreconfig").First(&cfg).Error
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": ""})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cfg.Value})
+}
+
+// GetWhitelistApps 获取白名单应用
+// POST /api/device/getwhitelistapps
+func GetWhitelistApps(c *gin.Context) {
+	var cfg model.Config
+	err := database.DB.Where("config_key = ?", "whitelistapps").First(&cfg).Error
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": ""})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cfg.Value})
+}
