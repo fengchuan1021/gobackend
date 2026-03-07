@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"gobackend/internal/aes_utils"
@@ -83,16 +84,23 @@ func RegisterDevice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "注册成功", "data": device})
 }
 
-// GetInitShellScripts 获取 init shell scripts 配置
+// GetInitShellScripts 获取 init shell scripts 配置（cfg.Value 为 ";" 分割的 shell 语句，返回 JSON 数组）
 // POST /api/devices/getinitshellscripts
 func GetInitShellScripts(c *gin.Context) {
 	var cfg model.Config
 	err := database.DB.Where("config_key = ?", "initshellscripts").First(&cfg).Error
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 0, "data": ""})
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": []string{}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cfg.Value})
+	parts := strings.Split(cfg.Value, ";")
+	scripts := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			scripts = append(scripts, s)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": scripts})
 }
 
 // SearchDevices 按序列号搜索设备
@@ -189,13 +197,22 @@ func UpdateDevice(c *gin.Context) {
 // GetTrickStoreConfig 获取 trick store config
 // POST /api/device/gettrickeystoreconfig
 func GetTrickStoreConfig(c *gin.Context) {
-	var cfg model.Config
-	err := database.DB.Where("config_key = ?", "trickeystoreconfig").First(&cfg).Error
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 0, "data": ""})
+	var cfg model.TrickStoreConfig
+	var req struct {
+		Serial string `json:"serial"`
+		Model  string `json:"model"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cfg.Value})
+	err := database.DB.Where("model = ? or model=''", req.Model).Order("id desc").First(&cfg).Error
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "data": nil})
+		return
+	} else {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": cfg})
+	}
 }
 
 // GetWhitelistApps 获取白名单应用

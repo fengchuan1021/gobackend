@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -75,7 +76,7 @@ func AesResponse(c *gin.Context) {
 	if blw.body.Len() == 0 {
 		return
 	}
-
+	fmt.Println(blw.body.String())
 	encrypted, err := aes_utils.Encrypt(blw.body.String())
 	if err != nil {
 		c.Writer = blw.ResponseWriter
