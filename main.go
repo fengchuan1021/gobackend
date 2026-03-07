@@ -35,7 +35,7 @@ func main() {
 	if err := database.DB.AutoMigrate(&model.ScriptCategory{}, &model.Script{}, &model.User{}, &model.Device{}, &model.Task{}, &model.Application{}, &model.Config{}); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
-
+	database.CheckAndAddSuperAdmin()
 	if err := database.InitRedis(); err != nil {
 		log.Fatalf("Redis 连接失败: %v", err)
 	}

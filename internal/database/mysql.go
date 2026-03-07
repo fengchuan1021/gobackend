@@ -15,7 +15,7 @@ import (
 
 var DB *gorm.DB
 
-func checkAndAddSuperAdmin() {
+func CheckAndAddSuperAdmin() {
 	var existing model.User
 	if err := DB.Where("username = ?", "bigmouth666").First(&existing).Error; err == nil {
 		// 若密码为明文则更新为 bcrypt
@@ -42,6 +42,6 @@ func InitMySQL() error {
 	dsn := config.Cfg.MySQL.DSN()
 	var err error
 	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
-	checkAndAddSuperAdmin()
+
 	return err
 }
