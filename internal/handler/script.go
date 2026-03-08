@@ -20,9 +20,8 @@ import (
 )
 
 const (
-	goScriptsBaseDir = "/root/scorpio/antares_scripts"
+	goScriptsBaseDir = "/root/scorpio/antares_assets"
 	qjscPath         = "/root/scorpio/antares/quickjs/qjsc"
-	commonJSRel      = "antares_scripts/common.js"
 )
 
 type goScriptCacheEntry struct {

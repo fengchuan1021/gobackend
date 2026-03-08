@@ -95,8 +95,7 @@ func main() {
 		}
 	}
 
-	// 静态资源：/images/... 等请求从 wwwroot 目录提供，如 /images/appicon/xxx.png -> /root/scorpio/wwwroot/images/appicon/xxx.png
-	r.Static("/images", "/root/scorpio/wwwroot/images")
+	r.Static("/images", "/root/scorpio/antares_assets/images")
 
 	go udpserver.Run(config.Cfg.Server.UDPPort)
 

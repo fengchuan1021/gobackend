@@ -9,7 +9,7 @@ type Application struct {
 	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	PackageName string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"package_name"`
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
-	IconPath    string    `gorm:"type:varchar(512)" json:"icon_path"` // 相对于 wwwroot 的路径，如 images/appicon/xxx.jpg
+	IconPath    string    `gorm:"type:varchar(512)" json:"icon_path"` // 相对于 antares_assets 的路径，如 images/appicon/xxx.jpg
 	Whitelist   bool      `gorm:"default:false" json:"whitelist"`
 	BackupData  bool      `gorm:"default:false" json:"backup_data"`
 	CreatedAt   time.Time `json:"created_at"`

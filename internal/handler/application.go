@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	wwwrootDir = "/root/scorpio/wwwroot"
+	wwwrootDir = "/root/scorpio/antares_assets"
 	appIconDir = "images/appicon"
 )
 
@@ -88,7 +88,7 @@ func SaveApplications(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "保存成功"})
 }
 
-// saveIconToFile 将 base64 图标保存到 wwwroot/images/appicon，返回相对路径
+// saveIconToFile 将 base64 图标保存到 antares_assets/images/appicon，返回相对路径
 // 根据 data URL 的 MIME 保存为 .png 或 .jpg，PNG 可保留透明通道，避免 JPG 导致黑边
 func saveIconToFile(packageName, iconBase64 string) string {
 	if iconBase64 == "" {

@@ -20,6 +20,7 @@ const (
 	CmdExecuteCommand   = 4
 	CmdAck              = 5
 	CmdExecuteDevScript = 6
+	CmdRunTaskScript    = 7
 )
 
 var (

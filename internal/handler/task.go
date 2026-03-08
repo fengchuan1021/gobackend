@@ -2,14 +2,17 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"gobackend/internal/base21"
 	"gobackend/internal/database"
 	"gobackend/internal/model"
+	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,16 +39,18 @@ func GetTaskDetail(c *gin.Context) {
 		return
 	}
 	file_path := task.Script.FilePath
-	BASE_DIR := "/root/scorpio/antares_scripts"
+	BASE_DIR := "/root/scorpio/antares_assets"
 	full_path := filepath.Join(BASE_DIR, file_path)
 	content, err := os.ReadFile(full_path)
+	fmt.Println("content", string(content))
 	if err != nil {
+		fmt.Println("read file failed", err)
 		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "read file failed"})
 		return
 	}
 	scriptEncoded := base21.EncodeToString(content)
 	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
+		"code": 200,
 		"msg":  "ok",
 		"data": gin.H{
 			"script": scriptEncoded,
@@ -74,13 +79,17 @@ func ClientAddTask(c *gin.Context) {
 		return
 	}
 	argsStr := string(argsBytes)
-
+	if len(req.Serials) <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "serials is required"})
+	}
+	database.DB.Where("device_serial in (?)", req.Serials).Delete(&model.Task{})
 	added := false
 	for _, serial := range req.Serials {
 		var device model.Device
 		if err := database.DB.Where("serial = ?", serial).First(&device).Error; err != nil {
 			continue
 		}
+
 		if device.ExpireAt == nil || device.ExpireAt.Before(time.Now()) {
 			continue
 		}
@@ -104,6 +113,7 @@ func ClientAddTask(c *gin.Context) {
 			if err := database.DB.Create(&task).Error; err != nil {
 				continue
 			}
+			go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(task.ID))))
 			added = true
 		}
 	}
