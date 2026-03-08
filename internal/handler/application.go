@@ -24,8 +24,8 @@ type ApplicationItem struct {
 	PackageName string `json:"packageName" binding:"required"`
 	Name        string `json:"name"`
 	IconBase64  string `json:"iconBase64"`
-	ToClean     bool   `json:"toClean"`
-	BackupData  bool   `json:"backupData"`
+	Whitelist   bool   `json:"whitelist"`
+	BackupData  bool   `json:"backup_data"`
 }
 
 // SaveApplicationsReq 保存应用请求
@@ -70,7 +70,7 @@ func SaveApplications(c *gin.Context) {
 		if err == nil {
 			existing.Name = app.Name
 			existing.IconPath = iconPath
-			existing.ToClean = app.ToClean
+			existing.Whitelist = app.Whitelist
 			existing.BackupData = app.BackupData
 
 			database.DB.Save(&existing)
@@ -79,7 +79,7 @@ func SaveApplications(c *gin.Context) {
 				PackageName: app.PackageName,
 				Name:        app.Name,
 				IconPath:    iconPath,
-				ToClean:     app.ToClean,
+				Whitelist:   app.Whitelist,
 				BackupData:  app.BackupData,
 			})
 		}
