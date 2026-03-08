@@ -68,8 +68,20 @@ func RegisterDevice(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设备已存在", "data": device})
 		return
 	}
+	userID, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	uid := userID.(uint)
 
-	device = model.Device{Serial: req.Serial}
+	var user model.User
+	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	device = model.Device{Serial: req.Serial, UserID: &uid, Username: user.Username}
 	if err := database.DB.Create(&device).Error; err != nil {
 		fmt.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "注册失败"})

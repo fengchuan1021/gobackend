@@ -60,15 +60,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token := genToken()
-	ctx := c.Request.Context()
-	key := "auth:token:" + token
-	val := fmt.Sprintf("%d:%d", user.ID, user.RoleID)
-	if err := database.RDB.Set(ctx, key, val, 365*24*time.Hour).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "登录失败"})
-		return
-	}
-
+	token := genToken(user.ID, user.RoleID)
 	profile := toProfile(&user)
 	c.JSON(http.StatusOK, gin.H{"data": LoginResp{Token: token, User: profile}})
 }
@@ -149,8 +141,14 @@ func toProfile(u *model.User) UserProfile {
 	}
 }
 
-func genToken() string {
+// genToken 生成 token，格式：hex(16字节随机数) + ":" + hex(data 与 b 异或后的结果)，data 为 "user_id:role_id"
+func genToken(user_id uint, role_id uint) string {
 	b := make([]byte, 16)
 	rand.Read(b)
-	return hex.EncodeToString(b)
+	data := []byte(fmt.Sprintf("%d:%d", user_id, role_id))
+	xorResult := make([]byte, len(data))
+	for i := range data {
+		xorResult[i] = data[i] ^ b[i%16]
+	}
+	return hex.EncodeToString(b) + ":" + hex.EncodeToString(xorResult)
 }
