@@ -74,7 +74,7 @@ func main() {
 		api.POST("/devices/getinitshellscripts", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetInitShellScripts)
 		api.POST("/device/gettrickeystoreconfig", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTrickStoreConfig)
 		api.POST("/device/getwhitelistapps", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetWhitelistApps)
-
+		api.GET("/devices/expireTime", middleware.Auth, handler.GetDeviceExpireTime)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)
 		api.GET("/applications", middleware.Auth, handler.ListApplications)

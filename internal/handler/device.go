@@ -81,7 +81,7 @@ func RegisterDevice(c *gin.Context) {
 		return
 	}
 
-	device = model.Device{Serial: req.Serial, UserID: &uid, Username: user.Username}
+	device = model.Device{Serial: req.Serial, UserID: uid, Username: user.Username}
 	if err := database.DB.Create(&device).Error; err != nil {
 		fmt.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "注册失败"})
@@ -107,6 +107,22 @@ func GetInitShellScripts(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": scripts})
+}
+func GetDeviceExpireTime(c *gin.Context) {
+	serial := c.Query("serial")
+	if serial == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": ""})
+		return
+	}
+	var device model.Device
+	err := database.DB.Where("serial = ?", serial).First(&device).Error
+
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": ""})
+		return
+	}
+	fmt.Println(device.ExpireAt.Format("2006-01-02"))
+	c.JSON(http.StatusOK, gin.H{"code": 200, "data": device.ExpireAt.Format("2006-01-02")})
 }
 
 // SearchDevices 按序列号搜索设备

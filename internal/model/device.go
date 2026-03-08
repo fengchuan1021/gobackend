@@ -9,7 +9,7 @@ type Device struct {
 	ID        uint       `gorm:"primaryKey;autoIncrement" json:"id"`
 	Serial    string     `gorm:"type:varchar(128);uniqueIndex;not null" json:"serial"`
 	Codename  string     `gorm:"type:varchar(128)" json:"codename"`
-	UserID    *uint      `gorm:"index" json:"user_id"`
+	UserID    uint       `gorm:"index;not null;default:0" json:"user_id"`
 	Username  string     `gorm:"type:varchar(64)" json:"username"`
 	ExpireAt  *time.Time `gorm:"index" json:"expire_at"`
 	CreatedAt time.Time  `json:"created_at"`

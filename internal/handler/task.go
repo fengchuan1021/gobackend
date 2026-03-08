@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"gobackend/internal/base21"
 	"gobackend/internal/database"
@@ -66,4 +68,48 @@ func ClientAddTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "task_id is required"})
 		return
 	}
+	argsBytes, err := json.Marshal(req.Params)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
+		return
+	}
+	argsStr := string(argsBytes)
+
+	added := false
+	for _, serial := range req.Serials {
+		var device model.Device
+		if err := database.DB.Where("serial = ?", serial).First(&device).Error; err != nil {
+			continue
+		}
+		if device.ExpireAt == nil || device.ExpireAt.Before(time.Now()) {
+			continue
+		}
+
+		for _, scriptID := range req.ScriptIDs {
+			task := model.Task{
+				UserID:       device.UserID,
+				DeviceID:     device.ID,
+				DeviceSerial: serial,
+				ScriptID:     uint(scriptID),
+				Args:         argsStr,
+				StartTime:    nil,
+				EndTime:      nil,
+				TotalMinutes: req.Time,
+				TotalRound:   req.Rounds,
+				LeftRound:    req.Rounds,
+				LeftMinute:   req.Time,
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}
+			if err := database.DB.Create(&task).Error; err != nil {
+				continue
+			}
+			added = true
+		}
+	}
+	if added {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "no device found"})
 }

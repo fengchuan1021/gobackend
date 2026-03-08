@@ -12,8 +12,8 @@ type Task struct {
 	DeviceSerial string    `gorm:"index;type:varchar(128)" json:"device_serial"`
 	ScriptID     uint      `gorm:"index;not null" json:"script_id"`
 	Args         string    `gorm:"type:text" json:"args"`
-	StartTime    time.Time `json:"start_time"`
-	EndTime      time.Time `json:"end_time"`
+	StartTime    *time.Time `json:"start_time"`
+	EndTime      *time.Time `json:"end_time"`
 	TotalMinutes int       `gorm:"default:0" json:"total_minutes"`
 	TotalRound   int       `gorm:"default:0" json:"total_round"`
 	LeftRound    int       `gorm:"default:0" json:"left_round"`
