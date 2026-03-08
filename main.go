@@ -82,7 +82,7 @@ func main() {
 		api.GET("/devices", middleware.Auth, handler.SearchDevices)
 		api.PATCH("/devices/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
-		api.POST("/task/clientAddTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientAddTask)
+		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
 		api.POST("/udp/cmdcallback", handler.CmdCallback)
 		// 设备凭 script_id 拉取脚本内容，无鉴权（script_id 不可猜测且 20s 过期）
 		api.POST("/dev/getDevScriptContent/:id", handler.GetDevScriptContent)
@@ -94,6 +94,9 @@ func main() {
 			dev.POST("/runDevScript", handler.RunDevScript)
 		}
 	}
+
+	// 静态资源：/images/... 等请求从 wwwroot 目录提供，如 /images/appicon/xxx.png -> /root/scorpio/wwwroot/images/appicon/xxx.png
+	r.Static("/images", "/root/scorpio/wwwroot/images")
 
 	go udpserver.Run(config.Cfg.Server.UDPPort)
 

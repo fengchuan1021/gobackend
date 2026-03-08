@@ -53,8 +53,11 @@ func GetTaskDetail(c *gin.Context) {
 }
 
 type ClientAddTaskReq struct {
-	ScriptID int                    `json:"script_id" binding:"required"`
-	Params   map[string]interface{} `json:"params" binding:"required"`
+	ScriptIDs []int                  `json:"script_ids" binding:"required"`
+	Time      int                    `json:"time" binding:"required"`
+	Rounds    int                    `json:"rounds" binding:"required"`
+	Params    map[string]interface{} `json:"params" binding:"required"`
+	Serials   []string               `json:"serials" binding:"required"`
 }
 
 func ClientAddTask(c *gin.Context) {
