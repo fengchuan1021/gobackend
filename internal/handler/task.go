@@ -171,6 +171,7 @@ func ClientFinishTask(c *gin.Context) {
 	}
 	if req.Status == model.TaskStatusAbnormalEnd {
 		task.EndTime = &now
+		task.LeftRound = 0
 		task.Status = model.TaskStatusAbnormalEnd
 		database.DB.Save(&task)
 	}
