@@ -125,10 +125,10 @@ func Run(port int) {
 			if hasTask == 0 {
 				//check unstarted task
 				var newTask model.Task
-				if err := database.DB.Where("device_serial = ? and (status=0 or status=3 or status=1)", serial).Order("left_round desc").First(&newTask).Error; err != nil {
+				if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=3 or status=1)", serial).Order("left_round desc").First(&newTask).Error; err != nil {
 
 				}
-				if newTask.ID != 0 {
+				if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(time.Now()) && newTask.ID != 0 {
 					go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))))
 
 				}

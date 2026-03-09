@@ -29,12 +29,12 @@ func GetTaskDetail(c *gin.Context) {
 		return
 	}
 	var task model.Task
-	if err := database.DB.Preload("Script").First(&task, req.TaskID).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "task not found"})
+	if err := database.DB.Preload("Script").Preload("Device").First(&task, req.TaskID).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "task not found"})
 		return
 	}
-	if task.ScriptID == 0 || task.Script.ID == 0 {
-		c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "script not found"})
+	if task.Device.ExpireAt == nil || task.Device.ExpireAt.Before(time.Now()) {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "device expired"})
 		return
 	}
 	file_path := task.Script.FilePath
