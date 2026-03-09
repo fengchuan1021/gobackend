@@ -3,8 +3,12 @@ package udpserver
 import (
 	"encoding/binary"
 	"fmt"
+	"gobackend/internal/database"
+	"gobackend/internal/model"
+	"gobackend/internal/udpserver"
 	"log"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -120,6 +124,14 @@ func Run(port int) {
 			hasTask := msgID
 			if hasTask == 0 {
 				//check unstarted task
+				var newTask model.Task
+				if err := database.DB.Where("device_serial = ? and (status=0 or status=3 or status=1)", serial).Order("left_round desc").First(&newTask).Error; err != nil {
+
+				}
+				if newTask.ID != 0 {
+					go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))))
+
+				}
 			}
 			resp := buildPacket(CmdHeartbeat, 0, nil)
 			c.WriteToUDP(resp, from)
