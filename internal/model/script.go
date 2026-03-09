@@ -17,6 +17,7 @@ type Script struct {
 
 	PackageName string         `gorm:"type:varchar(255);not null" json:"package_name"`
 	Category    ScriptCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	SortOrder   int            `gorm:"index;default:0" json:"sort_order"`
 }
 
 // TableName 指定表名
