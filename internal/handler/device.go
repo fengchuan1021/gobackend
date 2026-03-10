@@ -121,8 +121,11 @@ func GetDeviceExpireTime(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": ""})
 		return
 	}
-	fmt.Println(device.ExpireAt.Format("2006-01-02"))
-	c.JSON(http.StatusOK, gin.H{"code": 200, "data": device.ExpireAt.Format("2006-01-02")})
+	data := ""
+	if device.ExpireAt != nil {
+		data = device.ExpireAt.Format("2006-01-02")
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "data": data})
 }
 
 // SearchDevices 按序列号搜索设备
