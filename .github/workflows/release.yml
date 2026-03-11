@@ -1,0 +1,30 @@
+name: Build and Deploy to Server
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: tencent
+    
+    steps:
+
+    - name: build linux ubuntu binary
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: 47.83.170.116
+        username: root
+        key: ${{ secrets.SSH_KEY_ROOT }}
+        port: 22
+        script: |
+          cd /root/scorpio/gobackend && git fetch origin && git reset --hard origin/master && go build -o gobackend . && chmod +x gobackend
+          supervisorctl restart gobackend
+    

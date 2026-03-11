@@ -52,10 +52,11 @@ func main() {
 	wsHub := websocket.NewHub()
 	websocket.DefaultHub = wsHub
 	go wsHub.Run()
-	r.GET("/ws", websocket.Handle(wsHub))
-	r.GET("/go_scripts/*file_name", handler.GetGoScripts)
+
 	api := r.Group("/api")
 	{
+		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
+		api.GET("/ws", websocket.Handle(wsHub))
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.GET("/scripts", middleware.Auth, handler.ListScripts)
 		api.GET("/scripts/:id", middleware.Auth, handler.GetScript)
@@ -102,7 +103,7 @@ func main() {
 	go udpserver.Run(config.Cfg.Server.UDPPort)
 
 	addr := ":" + config.Cfg.Server.Port
-	log.Printf("服务启动: http://localhost%s", addr)
+
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
