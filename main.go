@@ -52,11 +52,11 @@ func main() {
 	wsHub := websocket.NewHub()
 	websocket.DefaultHub = wsHub
 	go wsHub.Run()
-
+	r.GET("/ws", websocket.Handle(wsHub))
 	api := r.Group("/api")
 	{
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
-		api.GET("/ws", websocket.Handle(wsHub))
+
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.GET("/scripts", middleware.Auth, handler.ListScripts)
 		api.GET("/scripts/:id", middleware.Auth, handler.GetScript)
