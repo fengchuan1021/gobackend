@@ -35,6 +35,42 @@ type UserProfile struct {
 	IsBanned     bool      `json:"is_banned"`
 	RegisterTime time.Time `json:"register_time"`
 }
+type RegisterReq struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// Register 注册
+func Register(c *gin.Context) {
+	var req RegisterReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "参数错误"})
+		return
+	}
+	var existing model.User
+	if err := database.DB.Where("username = ?", req.Username).First(&existing).Error; err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "用户名已存在"})
+		return
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "加密失败"})
+		return
+	}
+	user := model.User{
+		Username:     req.Username,
+		Password:     string(hashed),
+		RoleID:       0,
+		IsBanned:     false,
+		RegisterTime: time.Now(),
+	}
+	if err := database.DB.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "注册失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "注册成功"})
+
+}
 
 // Login 登录
 func Login(c *gin.Context) {
