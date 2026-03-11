@@ -3,15 +3,15 @@ package udpserver
 import (
 	"encoding/binary"
 	"fmt"
-	"gobackend/internal/database"
-	"gobackend/internal/model"
-	"gobackend/internal/udpserver"
 	"log"
 	"net"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gobackend/internal/database"
+	"gobackend/internal/model"
 )
 
 const (
@@ -129,7 +129,7 @@ func Run(port int) {
 
 				}
 				if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(time.Now()) && newTask.ID != 0 {
-					go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))))
+					go SendCommand(serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))))
 
 				}
 			}
