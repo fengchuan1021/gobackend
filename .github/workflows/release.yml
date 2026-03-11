@@ -22,7 +22,58 @@ jobs:
       with:
         host: 47.83.170.116
         username: root
-        key: ${{ secrets.SSH_KEY_ROOT }}
+        key: |
+          -----BEGIN RSA PRIVATE KEY-----
+          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
+          -----END RSA PRIVATE KEY-----
         port: 22
         script: |
           cd /root/scorpio/gobackend && git fetch origin && git reset --hard origin/master && go build -o gobackend . && chmod +x gobackend
