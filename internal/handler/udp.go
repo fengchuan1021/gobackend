@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 
 	"gobackend/internal/udpserver"
@@ -34,7 +33,7 @@ func CmdCallback(c *gin.Context) {
 	// 	return
 	// }
 	payload := []byte(req.Data)
-	fmt.Println("req.MsgID", req.MsgID, "payload", string(payload))
+
 	if udpserver.DeliverResult(req.MsgID, payload) {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "ok"})
 	} else {
