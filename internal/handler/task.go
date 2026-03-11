@@ -59,7 +59,7 @@ func GetTaskDetail(c *gin.Context) {
 		"msg":  "ok",
 		"data": gin.H{
 			"script":        scriptEncoded,
-			"Args":          task.Args,
+			"args":          task.Args,
 			"total_minutes": task.TotalMinutes,
 			"packge_name":   task.Script.PackageName,
 		},
