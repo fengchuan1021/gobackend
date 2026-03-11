@@ -61,7 +61,7 @@ func GetTaskDetail(c *gin.Context) {
 			"script":        scriptEncoded,
 			"args":          task.Args,
 			"total_minutes": task.TotalMinutes,
-			"packge_name":   task.Script.PackageName,
+			"package_name":  task.Script.PackageName,
 		},
 	})
 }
