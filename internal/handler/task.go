@@ -10,6 +10,7 @@ import (
 
 	"gobackend/internal/base21"
 	"gobackend/internal/database"
+	"gobackend/internal/middleware"
 	"gobackend/internal/model"
 	"gobackend/internal/udpserver"
 
@@ -71,9 +72,24 @@ type ClientAddTaskReq struct {
 }
 
 func ClientAddTask(c *gin.Context) {
+	userID, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
+		return
+	}
+	uid := userID.(uint)
+	var user model.User
+	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
+		return
+	}
+	if user.IsActive == false {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户未激活"})
+		return
+	}
 	var req ClientAddTaskReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "task_id is required"})
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task_id is required"})
 		return
 	}
 	// argsBytes, err := json.Marshal(req.Params)
@@ -84,7 +100,7 @@ func ClientAddTask(c *gin.Context) {
 	//argsStr := string(argsBytes)
 	argsStr := ""
 	if len(req.Serials) <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "serials is required"})
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serials is required"})
 	}
 	if req.Rounds == 0 {
 		req.Rounds = 1
