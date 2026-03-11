@@ -52,13 +52,16 @@ func GetTaskDetail(c *gin.Context) {
 	task.StartTime = &now
 	task.Status = model.TaskStatusRunning
 	database.DB.Save(&task)
+
 	scriptEncoded := base21.EncodeToString(content)
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "ok",
 		"data": gin.H{
-			"script": scriptEncoded,
-			"task":   task,
+			"script":        scriptEncoded,
+			"Args":          task.Args,
+			"total_minutes": task.TotalMinutes,
+			"packge_name":   task.Script.PackageName,
 		},
 	})
 }
