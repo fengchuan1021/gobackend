@@ -243,11 +243,54 @@ func GetTrickStoreConfig(c *gin.Context) {
 // GetWhitelistApps 获取白名单应用
 // POST /api/device/getwhitelistapps
 func GetWhitelistApps(c *gin.Context) {
-	var cfg model.Config
-	err := database.DB.Where("config_key = ?", "whitelistapps").First(&cfg).Error
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 0, "data": ""})
-		return
+	const cacheKey = "whitelistapps:apps"
+
+	ctx := c.Request.Context()
+
+	// 先从 Redis 读取缓存
+	if database.RDB != nil {
+		if cached, err := database.RDB.Get(ctx, cacheKey).Result(); err == nil && cached != "" {
+			var apps []string
+			if err := json.Unmarshal([]byte(cached), &apps); err == nil {
+				c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps})
+				return
+			}
+		}
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": cfg.Value})
+
+	apps := make([]string, 0)
+	var rows []string
+
+	// 查询 scripts 中 category_id != 0 的 package_name
+	var scriptPackages []string
+	if err := database.DB.Table("scripts").Where("category_id != 0").Pluck("package_name", &scriptPackages).Error; err == nil {
+		rows = append(rows, scriptPackages...)
+	}
+
+	// 查询 applications 中 whitelist = 1 的 package_name
+	var appPackages []string
+	if err := database.DB.Table("applications").Where("whitelist = 1").Pluck("package_name", &appPackages).Error; err == nil {
+		rows = append(rows, appPackages...)
+	}
+
+	// 去重，并存到 apps
+	appMap := make(map[string]struct{}, len(rows))
+	for _, pkg := range rows {
+		if pkg = strings.TrimSpace(pkg); pkg != "" {
+			appMap[pkg] = struct{}{}
+		}
+	}
+	apps = make([]string, 0, len(appMap))
+	for pkg := range appMap {
+		apps = append(apps, pkg)
+	}
+
+	// 写入 Redis，10 分钟有效期
+	if database.RDB != nil {
+		if b, err := json.Marshal(apps); err == nil {
+			_ = database.RDB.Set(ctx, cacheKey, b, 10*time.Minute).Err()
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps})
 }
