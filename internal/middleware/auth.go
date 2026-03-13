@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ const (
 func Auth(c *gin.Context) {
 	token := c.GetHeader("token")
 	if token == "" {
+		fmt.Println("not login")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 		c.Abort()
 		return
@@ -25,6 +27,7 @@ func Auth(c *gin.Context) {
 
 	parts := strings.SplitN(token, ":", 2)
 	if len(parts) != 2 {
+		fmt.Println("invalid token1")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效 token"})
 		c.Abort()
 		return
@@ -32,6 +35,7 @@ func Auth(c *gin.Context) {
 
 	b, err := hex.DecodeString(parts[0])
 	if err != nil || len(b) != 16 {
+		fmt.Println("invalid token2")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效 token"})
 		c.Abort()
 		return
@@ -39,6 +43,7 @@ func Auth(c *gin.Context) {
 
 	xorResult, err := hex.DecodeString(parts[1])
 	if err != nil || len(xorResult) == 0 {
+		fmt.Println("invalid token3")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效 token"})
 		c.Abort()
 		return
@@ -52,12 +57,14 @@ func Auth(c *gin.Context) {
 
 	userRole := strings.SplitN(string(data), ":", 2)
 	if len(userRole) != 2 {
+		fmt.Println("invalid token4")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效 token"})
 		c.Abort()
 		return
 	}
 
 	userID, err := strconv.ParseUint(userRole[0], 10, 64)
+	fmt.Println("userid", userID)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效 token"})
 		c.Abort()

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -50,24 +51,28 @@ func ListApplications(c *gin.Context) {
 
 // SaveApplications 保存应用配置
 func SaveApplications(c *gin.Context) {
+
 	_, exists := c.Get(middleware.UserIDKey)
 	if !exists {
+		fmt.Println("not login")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 		return
 	}
 
 	var req SaveApplicationsReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("args invalid")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-
+	fmt.Println("5555555")
 	for _, app := range req.Apps {
 		iconPath := saveIconToFile(app.PackageName, app.IconBase64)
 
 		var existing model.Application
 		err := database.DB.Where("package_name = ?", app.PackageName).First(&existing).Error
 		if err == nil {
+			fmt.Println("create", app.PackageName)
 			existing.Name = app.Name
 			existing.IconPath = iconPath
 			existing.Whitelist = app.Whitelist
@@ -75,6 +80,7 @@ func SaveApplications(c *gin.Context) {
 
 			database.DB.Save(&existing)
 		} else {
+			fmt.Println("create", app.PackageName)
 			database.DB.Create(&model.Application{
 				PackageName: app.PackageName,
 				Name:        app.Name,
