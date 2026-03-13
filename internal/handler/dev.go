@@ -148,6 +148,7 @@ func GetXmlLayout(c *gin.Context) {
 	}
 	data, err := udpserver.SendCommand(serial, udpserver.CmdGetXmlLayout, nil)
 	if err != nil {
+		fmt.Println("GetXmlLayout error:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取 XML 布局失败: " + err.Error()})
 		return
 	}
