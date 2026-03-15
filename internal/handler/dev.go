@@ -1,18 +1,16 @@
 package handler
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"os/exec"
-	"strings"
 	"time"
 
 	"gobackend/internal/database"
+	"gobackend/internal/model"
 	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
@@ -21,28 +19,17 @@ import (
 const devScriptKeyPrefix = "dev_script:"
 const devScriptTTL = 20 * time.Second
 
-// GetDevices 获取已连接的设备列表（adb devices）
+// GetDevices 从数据库获取设备列表
 // GET /api/dev/getDevices
 func GetDevices(c *gin.Context) {
-	fmt.Println("GetDevices")
-	cmd := exec.Command("adb", "devices")
-	out, err := cmd.Output()
-	if err != nil {
+	var list []model.Device
+	if err := database.DB.Find(&list).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取设备列表失败: " + err.Error()})
 		return
 	}
-
-	var devices []gin.H
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "List of") {
-			continue
-		}
-		parts := strings.Fields(line)
-		if len(parts) >= 2 && parts[1] == "device" {
-			devices = append(devices, gin.H{"serial": parts[0]})
-		}
+	devices := make([]gin.H, 0, len(list))
+	for _, d := range list {
+		devices = append(devices, gin.H{"serial": d.Serial})
 	}
 	c.JSON(http.StatusOK, gin.H{"data": devices})
 }
