@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,14 +55,22 @@ func GetTaskDetail(c *gin.Context) {
 	database.DB.Save(&task)
 
 	scriptEncoded := base21.EncodeToString(content)
+	commonjs_path := "/root/scorpio/antares_assets/common.js"
+	commonjs_info, err := os.Stat(commonjs_path)
+	var commonjs_version int64 = 1
+	if err == nil {
+		commonjs_version = commonjs_info.ModTime().Unix()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "ok",
 		"data": gin.H{
-			"script":        scriptEncoded,
-			"args":          task.Args,
-			"total_minutes": task.TotalMinutes,
-			"package_name":  task.Script.PackageName,
+			"script":          scriptEncoded,
+			"args":            task.Args,
+			"total_minutes":   task.TotalMinutes,
+			"package_name":    task.Script.PackageName,
+			"commonjsversion": commonjs_version,
 		},
 	})
 }
@@ -121,6 +130,10 @@ func ClientAddTask(c *gin.Context) {
 			continue
 		}
 		var task model.Task
+		//random shuffle scriptIDs
+		rand.Shuffle(len(req.ScriptIDs), func(i, j int) {
+			req.ScriptIDs[i], req.ScriptIDs[j] = req.ScriptIDs[j], req.ScriptIDs[i]
+		})
 		for _, scriptID := range req.ScriptIDs {
 			task = model.Task{
 				UserID:       device.UserID,
@@ -154,6 +167,26 @@ func ClientAddTask(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "no device found"})
+}
+
+type ClientStopTaskReq struct {
+	Serials []string `json:"serials" binding:"required"`
+}
+
+func ClientStopTask(c *gin.Context) {
+	var req ClientStopTaskReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serials is required"})
+		return
+	}
+	// if err := database.DB.Where("device_serial IN (?)", req.Serials).Delete(&model.Task{}).Error; err != nil {
+	// 	c.JSON(http.StatusOK, gin.H{"code": 500, "msg": ""})
+	// 	return
+	// }
+	for _, serial := range req.Serials {
+		go udpserver.SendCommand(serial, udpserver.CmdStopTask, []byte(""))
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
 
 type ClientFinishTaskReq struct {

@@ -25,6 +25,7 @@ const (
 	CmdAck              = 5
 	CmdExecuteDevScript = 6
 	CmdRunTaskScript    = 7
+	CmdStopTask         = 8
 )
 
 var (
