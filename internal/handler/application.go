@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gobackend/config"
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
@@ -16,9 +17,10 @@ import (
 )
 
 const (
-	wwwrootDir = "/root/scorpio/antares_assets"
 	appIconDir = "images/appicon"
 )
+
+var wwwrootDir = config.Cfg.SOLUTION_DIR + "/antares_assets"
 
 // ApplicationItem 应用项
 type ApplicationItem struct {

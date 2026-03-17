@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"gobackend/config"
 	"gobackend/internal/base21"
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
@@ -40,7 +41,7 @@ func GetTaskDetail(c *gin.Context) {
 		return
 	}
 	file_path := task.Script.FilePath
-	BASE_DIR := "/root/scorpio/antares_assets"
+	BASE_DIR := config.Cfg.SOLUTION_DIR + "/antares_assets"
 	full_path := filepath.Join(BASE_DIR, file_path)
 	content, err := os.ReadFile(full_path)
 	fmt.Println("content", string(content))
@@ -55,7 +56,7 @@ func GetTaskDetail(c *gin.Context) {
 	database.DB.Save(&task)
 
 	scriptEncoded := base21.EncodeToString(content)
-	commonjs_path := "/root/scorpio/antares_assets/common.js"
+	commonjs_path := config.Cfg.SOLUTION_DIR + "/antares_assets/common.js"
 	commonjs_info, err := os.Stat(commonjs_path)
 	var commonjs_version int64 = 1
 	if err == nil {

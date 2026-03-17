@@ -13,16 +13,15 @@ import (
 	"sync"
 	"time"
 
+	"gobackend/config"
 	"gobackend/internal/database"
 	"gobackend/internal/model"
 
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	goScriptsBaseDir = "/root/scorpio/antares_assets"
-	qjscPath         = "/root/scorpio/antares/quickjs/qjsc"
-)
+var goScriptsBaseDir = config.Cfg.SOLUTION_DIR + "/antares_assets"
+var qjscPath = config.Cfg.SOLUTION_DIR + "/antares/quickjs/qjsc"
 
 type goScriptCacheEntry struct {
 	Content    []byte

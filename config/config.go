@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 
 	"github.com/joho/godotenv"
@@ -11,9 +13,11 @@ import (
 var Cfg *Config
 
 type Config struct {
-	MySQL  MySQLConfig
-	Redis  RedisConfig
-	Server ServerConfig
+	MySQL        MySQLConfig
+	Redis        RedisConfig
+	Server       ServerConfig
+	BASE_DIR     string
+	SOLUTION_DIR string
 }
 
 type MySQLConfig struct {
@@ -49,7 +53,16 @@ func Load(env string) error {
 	redisDB, _ := strconv.Atoi(getEnv("REDIS_DB", "0"))
 	mysqlPort, _ := strconv.Atoi(getEnv("MYSQL_PORT", "3306"))
 
+	// 计算当前文件所在路径的父目录的父目录
+	_, filePath, _, ok := runtime.Caller(0)
+	if !ok {
+		return fmt.Errorf("无法获取当前文件路径")
+	}
+	baseDir := filepath.Dir(filepath.Dir(filePath))
+
 	Cfg = &Config{
+		BASE_DIR:     baseDir,
+		SOLUTION_DIR: filepath.Dir(baseDir),
 		MySQL: MySQLConfig{
 			Host:     getEnv("MYSQL_HOST", "127.0.0.1"),
 			Port:     mysqlPort,

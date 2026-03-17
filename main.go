@@ -99,7 +99,7 @@ func main() {
 		}
 	}
 
-	r.Static("/images", "/root/scorpio/antares_assets/images")
+	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
 
 	go udpserver.Run(config.Cfg.Server.UDPPort)
 
