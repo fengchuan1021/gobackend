@@ -106,7 +106,7 @@ func saveIconToFile(packageName, iconBase64 string) string {
 	if wwwrootDir == "" {
 		baseDir := ""
 		if config.Cfg != nil {
-			baseDir = config.Cfg.BASE_DIR
+			baseDir = config.Cfg.SOLUTION_DIR
 		}
 		if baseDir == "" {
 			baseDir = "."

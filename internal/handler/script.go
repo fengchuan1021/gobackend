@@ -243,7 +243,7 @@ func GetGoScripts(c *gin.Context) {
 	if goScriptsBaseDir == "" || qjscPath == "" {
 		baseDir := ""
 		if config.Cfg != nil {
-			baseDir = config.Cfg.BASE_DIR
+			baseDir = config.Cfg.SOLUTION_DIR
 		}
 		if baseDir == "" {
 			baseDir = "."
