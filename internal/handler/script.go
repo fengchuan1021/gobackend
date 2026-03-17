@@ -20,8 +20,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var goScriptsBaseDir = config.Cfg.SOLUTION_DIR + "/antares_assets"
-var qjscPath = config.Cfg.SOLUTION_DIR + "/antares/quickjs/qjsc"
+var goScriptsBaseDir string
+var qjscPath string
 
 type goScriptCacheEntry struct {
 	Content    []byte
@@ -237,6 +237,19 @@ func GetGoScripts(c *gin.Context) {
 	if fileName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
+	}
+
+	// 延迟初始化与配置相关的路径，避免包初始化阶段访问未加载的 config.Cfg
+	if goScriptsBaseDir == "" || qjscPath == "" {
+		baseDir := ""
+		if config.Cfg != nil {
+			baseDir = config.Cfg.BASE_DIR
+		}
+		if baseDir == "" {
+			baseDir = "."
+		}
+		goScriptsBaseDir = filepath.Join(baseDir, "antares_assets")
+		qjscPath = filepath.Join(baseDir, "antares", "quickjs", "qjsc")
 	}
 
 	baseDir, err := filepath.Abs(goScriptsBaseDir)

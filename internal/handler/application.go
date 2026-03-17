@@ -20,7 +20,7 @@ const (
 	appIconDir = "images/appicon"
 )
 
-var wwwrootDir = config.Cfg.SOLUTION_DIR + "/antares_assets"
+var wwwrootDir string
 
 // ApplicationItem 应用项
 type ApplicationItem struct {
@@ -101,6 +101,17 @@ func SaveApplications(c *gin.Context) {
 func saveIconToFile(packageName, iconBase64 string) string {
 	if iconBase64 == "" {
 		return ""
+	}
+	// 延迟初始化 wwwrootDir，避免在 config.Cfg 还未加载时发生空指针
+	if wwwrootDir == "" {
+		baseDir := ""
+		if config.Cfg != nil {
+			baseDir = config.Cfg.BASE_DIR
+		}
+		if baseDir == "" {
+			baseDir = "."
+		}
+		wwwrootDir = filepath.Join(baseDir, "antares_assets")
 	}
 	ext := ".jpg"
 	if idx := strings.Index(iconBase64, ","); idx >= 0 {
