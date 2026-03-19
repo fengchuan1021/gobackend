@@ -188,3 +188,69 @@ func genToken(user_id uint, role_id uint) string {
 	}
 	return hex.EncodeToString(b) + ":" + hex.EncodeToString(xorResult)
 }
+
+type ActivateUserReq struct {
+	Username string `json:"username" binding:"required"`
+}
+
+func ActivateUser(c *gin.Context) {
+	userID, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	uid := userID.(uint)
+	var req ActivateUserReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	var user model.User
+	if err := database.DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
+		return
+	}
+
+	// 用事务同时更新用户和写入激活日志
+	tx := database.DB.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "激活失败"})
+		return
+	}
+
+	user.IsActive = true
+	if err := tx.Save(&user).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "激活失败"})
+		return
+	}
+
+	// 获取操作者username（写入日志）
+	var operator model.User
+	if err := tx.First(&operator, uid).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "激活失败"})
+		return
+	}
+
+	log := model.UserActivateLog{
+		OperatorUID:      uid,
+		OperatorUsername: operator.Username,
+		TargetUID:        user.ID,
+		TargetUsername:   user.Username,
+		CreatedAt:        time.Now(),
+	}
+
+	if err := tx.Create(&log).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "激活失败"})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "激活失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "激活成功"})
+}

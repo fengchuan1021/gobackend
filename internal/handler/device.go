@@ -20,12 +20,12 @@ import (
 func AppendLog(c *gin.Context) {
 	serial := c.Param("serial")
 	if serial == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 serial"})
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
 		return
 	}
 	body, err := c.GetRawData()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "读取请求体失败"})
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "读取请求体失败"})
 		return
 	}
 	message := string(body)
@@ -58,7 +58,7 @@ func RegisterDevice(c *gin.Context) {
 	var req RegisterDeviceReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fmt.Println(err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
 		return
 	}
 	var device model.Device
@@ -70,21 +70,21 @@ func RegisterDevice(c *gin.Context) {
 	}
 	userID, exists := c.Get(middleware.UserIDKey)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
 		return
 	}
 	uid := userID.(uint)
 
 	var user model.User
 	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户不存在"})
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "用户不存在"})
 		return
 	}
 
 	device = model.Device{Serial: req.Serial, UserID: uid, Username: user.Username}
 	if err := database.DB.Create(&device).Error; err != nil {
 		fmt.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "注册失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "注册失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "注册成功", "data": device})
@@ -132,7 +132,7 @@ func GetDeviceExpireTime(c *gin.Context) {
 func SearchDevices(c *gin.Context) {
 	_, exists := c.Get(middleware.UserIDKey)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
 		return
 	}
 
@@ -145,7 +145,7 @@ func SearchDevices(c *gin.Context) {
 	var devices []model.Device
 	err := database.DB.Where("serial LIKE ?", "%"+serial+"%").Find(&devices).Error
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "查询失败"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": devices})
@@ -153,70 +153,101 @@ func SearchDevices(c *gin.Context) {
 
 // UpdateDeviceReq 更新设备请求
 type UpdateDeviceReq struct {
-	Username string  `json:"username"`
-	ExpireAt *string `json:"expire_at"` // ISO8601 如 2025-12-31，null 表示清除到期时间
+	//Username string  `json:"username"`
+	//ExpireAt *string `json:"expire_at"` // ISO8601 如 2025-12-31，null 表示清除到期时间
+	// AddDuration 按“月数”增加到期时间。
+	// 如果设备原本的 ExpireAt <= 当前时间或为空，则从当前时间开始增加；
+	// 否则从原 ExpireAt 开始增加。
+	AddDuration *int `json:"add_duration"`
 }
 
-// UpdateDevice 更新设备（绑定用户、到期时间）
+// add_device_expire_time 更新设备（增加到期时间）
+// PATCH /api/devices/add_device_expire_time/:id
 func UpdateDevice(c *gin.Context) {
-	_, exists := c.Get(middleware.UserIDKey)
+	userIDRaw, exists := c.Get(middleware.UserIDKey)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
 		return
 	}
+	uid := userIDRaw.(uint)
 
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
 		return
 	}
 
 	var req UpdateDeviceReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
 		return
 	}
 
 	var device model.Device
 	if err := database.DB.First(&device, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "设备不存在"})
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "设备不存在"})
 		return
 	}
-
+	var deviceUser model.User
+	if err := database.DB.First(&deviceUser, device.UserID).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "设备用户不存在"})
+		return
+	}
+	if !deviceUser.IsActive {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "设备用户未激活"})
+		return
+	}
 	updates := make(map[string]interface{})
+	var newExpireAt *time.Time
+	var months int
 
-	if req.Username != "" {
-		var user model.User
-		if err := database.DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "用户不存在"})
+	if req.AddDuration != nil {
+		months = *req.AddDuration
+		if months <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"msg": "add_duration 必须是正数（单位：月）"})
 			return
 		}
-		updates["user_id"] = user.ID
-		updates["username"] = user.Username
-	}
 
-	if req.ExpireAt != nil {
-		if *req.ExpireAt == "" {
-			updates["expire_at"] = nil
-		} else {
-			t, err := time.Parse("2006-01-02", *req.ExpireAt)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "到期时间格式错误，请使用 YYYY-MM-DD"})
-				return
-			}
-			updates["expire_at"] = &t
+		now := time.Now()
+		base := now
+		// 按需求：ExpireAt 为空或 <= 当前时间，从当前时间开始；否则从原 ExpireAt 开始。
+		if device.ExpireAt != nil && !device.ExpireAt.IsZero() && device.ExpireAt.After(now) {
+			base = *device.ExpireAt
 		}
+
+		t := base.AddDate(0, months, 0)
+		updates["expire_at"] = &t
+		newExpireAt = &t
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "add_duration 不能为空"})
+		return
 	}
 
 	if len(updates) > 0 {
 		if err := database.DB.Model(&device).Updates(updates).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+			c.JSON(http.StatusInternalServerError, gin.H{"msg": "更新失败"})
 			return
+		}
+
+		// 写入操作日志（记录增到期的月数与新到期时间）
+		var user model.User
+		if err := database.DB.First(&user, uid).Error; err == nil {
+			log := model.Log{
+				UserID:       uid,
+				Username:     user.Username,
+				LogType:      "device_expire_add",
+				Remark:       fmt.Sprintf("增加设备到期时间：%d 个月", months),
+				DeviceSerial: device.Serial,
+				DeviceID:     device.ID,
+				AddDuration:  months,
+				NewExpireAt:  newExpireAt,
+			}
+			_ = database.DB.Create(&log).Error
 		}
 	}
 
 	database.DB.First(&device, device.ID)
-	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "更新成功", "data": device})
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "更新成功", "data": device})
 }
 
 // GetTrickStoreConfig 获取 trick store config
@@ -228,7 +259,7 @@ func GetTrickStoreConfig(c *gin.Context) {
 		Model  string `json:"model"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
 		return
 	}
 	err := database.DB.Where("model = ? or model=''", req.Model).Order("id desc").First(&cfg).Error

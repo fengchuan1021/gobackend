@@ -32,7 +32,17 @@ func main() {
 	log.Println("MySQL 连接成功")
 
 	// 自动迁移
-	if err := database.DB.AutoMigrate(&model.ScriptCategory{}, &model.Script{}, &model.User{}, &model.Device{}, &model.Task{}, &model.Application{}, &model.Config{}); err != nil {
+	if err := database.DB.AutoMigrate(
+		&model.ScriptCategory{},
+		&model.Script{},
+		&model.User{},
+		&model.Device{},
+		&model.Task{},
+		&model.Application{},
+		&model.Config{},
+		&model.Log{},
+		&model.UserActivateLog{},
+	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 	database.CheckAndAddSuperAdmin()
@@ -79,10 +89,11 @@ func main() {
 		api.GET("/devices/expireTime", middleware.Auth, handler.GetDeviceExpireTime)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)
+		api.POST("/user/activate", middleware.Auth, handler.ActivateUser)
 		api.GET("/applications", middleware.Auth, handler.ListApplications)
 		api.POST("/applications", middleware.Auth, handler.SaveApplications)
 		api.GET("/devices", middleware.Auth, handler.SearchDevices)
-		api.PATCH("/devices/:id", middleware.Auth, handler.UpdateDevice)
+		api.PATCH("/devices/add_device_expire_time/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
 		api.POST("/task/clientStopTask", middleware.Auth, handler.ClientStopTask)
