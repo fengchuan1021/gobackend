@@ -9,6 +9,7 @@ import (
 	"gobackend/internal/handler"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
+	"gobackend/internal/model/third"
 	"gobackend/internal/udpserver"
 	"gobackend/internal/websocket"
 
@@ -42,6 +43,7 @@ func main() {
 		&model.Config{},
 		&model.Log{},
 		&model.UserActivateLog{},
+		&third.QuNaTask{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -108,6 +110,7 @@ func main() {
 			dev.GET("/getXmlLayout", handler.GetXmlLayout)
 			dev.POST("/runDevScript", handler.RunDevScript)
 		}
+		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
 	}
 
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
