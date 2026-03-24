@@ -15,9 +15,10 @@ type Script struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 
-	PackageName string         `gorm:"type:varchar(255);not null" json:"package_name"`
-	Category    ScriptCategory `gorm:"foreignKey:CategoryID;constraint:-" json:"category,omitempty"`
-	SortOrder   int            `gorm:"index;default:0" json:"sort_order"`
+	PackageName  string         `gorm:"type:varchar(255);not null" json:"package_name"`
+	Category     ScriptCategory `gorm:"foreignKey:CategoryID;constraint:-" json:"category,omitempty"`
+	IsInMiMarket bool           `gorm:"default:false" json:"is_in_mi_market"` // 是否在小米商店中
+	SortOrder    int            `gorm:"index;default:0" json:"sort_order"`
 }
 
 // TableName 指定表名

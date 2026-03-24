@@ -69,11 +69,13 @@ func extractBytecodeFromC(cSource []byte) ([]byte, error) {
 
 // ScriptListItem 脚本列表项（不含 content）
 type ScriptListItem struct {
-	ID          uint   `json:"id"`
-	Name        string `json:"name"`
-	IconURL     string `json:"icon_url"`
-	CategoryID  uint   `json:"category_id"`
-	Description string `json:"description"`
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	IconURL      string `json:"icon_url"`
+	CategoryID   uint   `json:"category_id"`
+	Description  string `json:"description"`
+	PackageName  string `json:"package_name"`
+	IsInMiMarket bool   `json:"is_in_mi_market"`
 }
 
 // CategoryWithScripts 分类及其脚本树节点
@@ -96,7 +98,7 @@ func GetScriptsTree(c *gin.Context) {
 		var scripts []model.Script
 		// 排除 content 字段，不加载到内存
 		err := database.DB.Model(&model.Script{}).
-			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at").
+			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market").
 			Where("category_id = ?", cat.ID).
 			Find(&scripts).Error
 		if err != nil {
@@ -107,11 +109,13 @@ func GetScriptsTree(c *gin.Context) {
 		items := make([]ScriptListItem, 0, len(scripts))
 		for _, s := range scripts {
 			items = append(items, ScriptListItem{
-				ID:          s.ID,
-				Name:        s.Name,
-				IconURL:     s.IconURL,
-				CategoryID:  s.CategoryID,
-				Description: s.Description,
+				ID:           s.ID,
+				Name:         s.Name,
+				IconURL:      s.IconURL,
+				CategoryID:   s.CategoryID,
+				PackageName:  s.PackageName,
+				Description:  s.Description,
+				IsInMiMarket: s.IsInMiMarket,
 			})
 		}
 
@@ -142,7 +146,7 @@ func GetScript(c *gin.Context) {
 // ListScripts 脚本列表（管理端，不含 content）
 func ListScripts(c *gin.Context) {
 	var list []model.Script
-	err := database.DB.Select("id", "name", "icon_url", "category_id", "description", "package_name", "created_at", "updated_at").
+	err := database.DB.Select("id", "name", "icon_url", "category_id", "description", "package_name", "created_at", "updated_at", "is_in_mi_market").
 		Order("id desc").Find(&list).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
