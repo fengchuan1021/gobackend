@@ -1,0 +1,6 @@
+mkdir -p /root/git/scorpio.git
+cd /root/git/scorpio.git
+git init --bare
+
+
+mkdir -p /root/scorpio

@@ -14,6 +14,9 @@ type ScriptCategory struct {
 	SortOrder   int       `gorm:"index;default:0" json:"sort_order"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+
+	// 逻辑关联：category_id 在 scripts 表，迁移时不创建数据库外键
+	Scripts []Script `gorm:"foreignKey:CategoryID;constraint:-" json:"scripts,omitempty"`
 }
 
 // TableName 指定表名

@@ -16,7 +16,7 @@ type Script struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 
 	PackageName string         `gorm:"type:varchar(255);not null" json:"package_name"`
-	Category    ScriptCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	Category    ScriptCategory `gorm:"foreignKey:CategoryID;constraint:-" json:"category,omitempty"`
 	SortOrder   int            `gorm:"index;default:0" json:"sort_order"`
 }
 
