@@ -44,6 +44,7 @@ func main() {
 		&model.Log{},
 		&model.UserActivateLog{},
 		&third.QuNaTask{},
+		&third.QuNaTaskSummary{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -112,6 +113,8 @@ func main() {
 		}
 		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
 		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
+		api.POST("/third/uploadQuNaTask", middleware.Auth, handler.UploadQuNaTask)
+		api.POST("/third/getQuNaTaskSummaryList", middleware.Auth, handler.GetQuNaTaskSummaryList)
 	}
 
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
