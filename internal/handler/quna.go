@@ -83,14 +83,20 @@ func UpdateQuNaTaskResult(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
 		return
 	}
-	var task third.QuNaTask
-	if err := database.DB.Where("id = ?", req.TaskID).First(&task).Error; err != nil {
+	if err := database.DB.Where("id = ?", req.TaskID).First(&third.QuNaTask{}).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task not found"})
 		return
 	}
-	task.Result = req.Result
-	task.Status = 2
-	task.EndTime = time.Now()
-	database.DB.Save(&task)
+
+	if err := database.DB.Model(&third.QuNaTask{}).
+		Where("id = ?", req.TaskID).
+		Updates(map[string]interface{}{
+			"result":   req.Result,
+			"status":   2,
+			"end_time": time.Now(),
+		}).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "update failed"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
