@@ -111,6 +111,7 @@ func main() {
 			dev.POST("/runDevScript", handler.RunDevScript)
 		}
 		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
+		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
 	}
 
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")

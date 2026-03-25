@@ -71,3 +71,26 @@ func GetQuNaTask(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": tasks})
 }
+
+type updateQuNaTaskResultReq struct {
+	TaskID uint   `json:"task_id" binding:"required"`
+	Result string `json:"result" binding:"required"`
+}
+
+func UpdateQuNaTaskResult(c *gin.Context) {
+	var req updateQuNaTaskResultReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	var task third.QuNaTask
+	if err := database.DB.Where("id = ?", req.TaskID).First(&task).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task not found"})
+		return
+	}
+	task.Result = req.Result
+	task.Status = 2
+	task.EndTime = time.Now()
+	database.DB.Save(&task)
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
+}
