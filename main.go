@@ -42,6 +42,7 @@ func main() {
 		&model.Application{},
 		&model.Config{},
 		&model.Log{},
+		&model.TrickStoreConfig{},
 		&model.UserActivateLog{},
 		&third.QuNaTask{},
 		&third.QuNaTaskSummary{},
