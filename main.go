@@ -40,6 +40,7 @@ func main() {
 		&model.Application{},
 		&model.Config{},
 		&model.Log{},
+
 		&model.TrickStoreConfig{},
 		&model.UserActivateLog{},
 	); err != nil {
