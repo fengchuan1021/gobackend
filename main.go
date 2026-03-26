@@ -30,7 +30,6 @@ func main() {
 		log.Fatalf("MySQL 连接失败: %v", err)
 	}
 	log.Println("MySQL 连接成功")
-
 	// 自动迁移
 	if err := database.DB.AutoMigrate(
 		&model.ScriptCategory{},
@@ -41,6 +40,7 @@ func main() {
 		&model.Application{},
 		&model.Config{},
 		&model.Log{},
+		&model.TrickStoreConfig{},
 		&model.UserActivateLog{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
