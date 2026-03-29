@@ -130,20 +130,41 @@ func GetDeviceExpireTime(c *gin.Context) {
 
 // SearchDevices 按序列号搜索设备
 func SearchDevices(c *gin.Context) {
-	_, exists := c.Get(middleware.UserIDKey)
+	userIDvalue, exists := c.Get(middleware.UserIDKey)
+
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
 		return
 	}
-
-	serial := c.Query("serial")
-	if serial == "" {
-		c.JSON(http.StatusOK, gin.H{"data": []model.Device{}})
+	roleID, exists := c.Get(middleware.RoleIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
 		return
 	}
+	roleIDValue := roleID.(uint)
+	userID := userIDvalue.(uint)
+	serial := c.Query("serial")
+	listAll := c.Query("all") == "1" || c.Query("all") == "true"
 
 	var devices []model.Device
-	err := database.DB.Where("serial LIKE ?", "%"+serial+"%").Find(&devices).Error
+	var err error
+	if listAll {
+		if roleIDValue != 1 {
+			err = database.DB.Where("user_id = ?", userID).Order("id ASC").Find(&devices).Error
+		} else {
+			err = database.DB.Order("id ASC").Find(&devices).Error
+		}
+
+	} else if serial == "" {
+		c.JSON(http.StatusOK, gin.H{"data": []model.Device{}})
+		return
+	} else {
+		if roleIDValue != 1 {
+			err = database.DB.Where("user_id = ?", userID).Where("serial LIKE ?", "%"+serial+"%").Find(&devices).Error
+		} else {
+			err = database.DB.Where("serial LIKE ?", "%"+serial+"%").Find(&devices).Error
+		}
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "查询失败"})
 		return
