@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"gobackend/internal/database"
@@ -122,7 +123,9 @@ func GetDevScriptContent(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "脚本不存在或已过期"})
 		return
 	}
-	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(content))
+	body := []byte(content)
+	c.Header("Content-Length", strconv.Itoa(len(body)))
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", body)
 }
 
 // GetXmlLayout 根据设备序列号获取 XML 布局
