@@ -74,6 +74,7 @@ func main() {
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
 		api.GET("/ws", websocket.Handle(wsHub))
 		api.GET("/scripts_tree", handler.GetScriptsTree)
+		api.POST("/file/uploadFile", handler.UploadFile)
 		api.GET("/scripts", middleware.Auth, handler.ListScripts)
 		api.GET("/scripts/:id", middleware.Auth, handler.GetScript)
 		api.POST("/scripts", middleware.Auth, handler.CreateScript)
@@ -118,9 +119,11 @@ func main() {
 		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
 		api.POST("/third/uploadQuNaTask", middleware.Auth, handler.UploadQuNaTask)
 		api.POST("/third/getQuNaTaskSummaryList", middleware.Auth, handler.GetQuNaTaskSummaryList)
+
 	}
 
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
+	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
 
 	go udpserver.Run(config.Cfg.Server.UDPPort)
 
