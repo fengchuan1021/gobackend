@@ -69,6 +69,8 @@ func main() {
 	r.GET("/ws", websocket.Handle(wsHub))
 	api := r.Group("/api")
 	{
+		api.GET("/updateAppVersion", handler.UpdateAppVersion)
+		api.GET("/getAppVersion", handler.GetAppVersion)
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
 		api.GET("/ws", websocket.Handle(wsHub))
 		api.GET("/scripts_tree", handler.GetScriptsTree)

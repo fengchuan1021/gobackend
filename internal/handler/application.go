@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"gobackend/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 const (
@@ -136,4 +138,52 @@ func saveIconToFile(packageName, iconBase64 string) string {
 		return ""
 	}
 	return filepath.ToSlash(filepath.Join(appIconDir, filename))
+}
+
+// UpdateAppVersion 更新应用版本
+func UpdateAppVersion(c *gin.Context) {
+	version := strings.TrimSpace(c.Query("version"))
+	if version == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "version不能为空"})
+		return
+	}
+
+	var cfg model.Config
+	err := database.DB.Where("config_key = ?", model.AppVersionConfigKey).First(&cfg).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			cfg = model.Config{Key: model.AppVersionConfigKey, Value: version}
+			if createErr := database.DB.Create(&cfg).Error; createErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": "更新失败"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": "更新失败"})
+			return
+		}
+	} else {
+		cfg.Value = version
+		if saveErr := database.DB.Save(&cfg).Error; saveErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": "更新失败"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "更新成功", "version": version})
+}
+
+// GetAppVersion 获取应用版本
+func GetAppVersion(c *gin.Context) {
+	var cfg model.Config
+	err := database.DB.Where("config_key = ?", model.AppVersionConfigKey).First(&cfg).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "version": ""})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": "获取失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "version": cfg.Value})
 }

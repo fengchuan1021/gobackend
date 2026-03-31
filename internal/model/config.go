@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+const AppVersionConfigKey = "app_version"
+
 // Config 配置模型（key-value）
 type Config struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
