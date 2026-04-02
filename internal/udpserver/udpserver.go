@@ -26,6 +26,7 @@ const (
 	CmdExecuteDevScript = 6
 	CmdRunTaskScript    = 7
 	CmdStopTask         = 8
+	CmdBackupApps       = 9
 )
 
 var (

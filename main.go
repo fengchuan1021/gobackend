@@ -42,6 +42,7 @@ func main() {
 		&model.Log{},
 		&model.TrickStoreConfig{},
 		&model.UserActivateLog{},
+		&model.Backup{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -65,6 +66,10 @@ func main() {
 	r.GET("/ws", websocket.Handle(wsHub))
 	api := r.Group("/api")
 	{
+		api.POST("/backup/backupApps", middleware.Auth, handler.BackupApps)
+		api.POST("/backup/listBackups", middleware.Auth, handler.ListBackups)
+		api.POST("/backup/uploadBackup", middleware.Auth, handler.UploadBackup)
+		api.POST("/backup/setProcessStatus", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.SetProcessStatus)
 		api.GET("/updateAppVersion", handler.UpdateAppVersion)
 		api.GET("/getAppVersion", handler.GetAppVersion)
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
