@@ -76,6 +76,7 @@ type ScriptListItem struct {
 	Description  string `json:"description"`
 	PackageName  string `json:"package_name"`
 	IsInMiMarket bool   `json:"is_in_mi_market"`
+	IsInNetdisk  bool   `json:"is_in_netdisk"`
 }
 
 // CategoryWithScripts 分类及其脚本树节点
@@ -98,7 +99,7 @@ func GetScriptsTree(c *gin.Context) {
 		var scripts []model.Script
 		// 排除 content 字段，不加载到内存
 		err := database.DB.Model(&model.Script{}).
-			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market").
+			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market", "is_in_netdisk").
 			Where("category_id = ?", cat.ID).
 			Find(&scripts).Error
 		if err != nil {
@@ -116,6 +117,7 @@ func GetScriptsTree(c *gin.Context) {
 				PackageName:  s.PackageName,
 				Description:  s.Description,
 				IsInMiMarket: s.IsInMiMarket,
+				IsInNetdisk:  s.IsInNetdisk,
 			})
 		}
 
@@ -146,7 +148,7 @@ func GetScript(c *gin.Context) {
 // ListScripts 脚本列表（管理端，不含 content）
 func ListScripts(c *gin.Context) {
 	var list []model.Script
-	err := database.DB.Select("id", "name", "icon_url", "category_id", "description", "package_name", "created_at", "updated_at", "is_in_mi_market").
+	err := database.DB.Select("id", "name", "icon_url", "category_id", "description", "package_name", "created_at", "updated_at", "is_in_mi_market", "is_in_netdisk").
 		Order("id desc").Find(&list).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
@@ -346,12 +348,14 @@ func GetGoScripts(c *gin.Context) {
 
 // UpdateScriptReq 更新脚本请求（字段均可选）
 type UpdateScriptReq struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	CategoryID  *uint   `json:"category_id"`
-	FilePath    *string `json:"file_path"`
-	PackageName *string `json:"package_name"`
-	IconURL     *string `json:"icon_url"`
+	Name         *string `json:"name"`
+	Description  *string `json:"description"`
+	CategoryID   *uint   `json:"category_id"`
+	FilePath     *string `json:"file_path"`
+	PackageName  *string `json:"package_name"`
+	IconURL      *string `json:"icon_url"`
+	IsInMiMarket *bool   `json:"is_in_mi_market"`
+	IsInNetdisk  *bool   `json:"is_in_netdisk"`
 }
 
 // UpdateScript 更新脚本
@@ -388,6 +392,12 @@ func UpdateScript(c *gin.Context) {
 	}
 	if req.IconURL != nil {
 		s.IconURL = *req.IconURL
+	}
+	if req.IsInMiMarket != nil {
+		s.IsInMiMarket = *req.IsInMiMarket
+	}
+	if req.IsInNetdisk != nil {
+		s.IsInNetdisk = *req.IsInNetdisk
 	}
 	if err := database.DB.Save(&s).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
