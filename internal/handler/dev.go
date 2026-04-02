@@ -82,12 +82,14 @@ type RunDevScriptReq struct {
 func RunDevScript(c *gin.Context) {
 	var req RunDevScriptReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("RunDevScript error:", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，需 serial 与 script"})
 		return
 	}
 
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
+		fmt.Println("RunDevScript error:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成 script_id 失败"})
 		return
 	}
@@ -95,12 +97,14 @@ func RunDevScript(c *gin.Context) {
 	key := devScriptKeyPrefix + scriptID
 	ctx := context.Background()
 	if err := database.RDB.Set(ctx, key, "enablelog();\n"+req.Script, devScriptTTL).Err(); err != nil {
+		fmt.Println("RunDevScript error:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入脚本缓存失败"})
 		return
 	}
 
 	data, err := udpserver.SendCommand(req.Serial, udpserver.CmdExecuteDevScript, []byte(scriptID))
 	if err != nil {
+		fmt.Println("RunDevScript error:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "执行脚本失败: " + err.Error()})
 		return
 	}

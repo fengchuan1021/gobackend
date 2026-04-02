@@ -43,6 +43,7 @@ func main() {
 		&model.TrickStoreConfig{},
 		&model.UserActivateLog{},
 		&model.Backup{},
+		&model.Blacklist{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -70,6 +71,10 @@ func main() {
 		api.POST("/backup/listBackups", middleware.Auth, handler.ListBackups)
 		api.POST("/backup/uploadBackup", middleware.Auth, handler.UploadBackup)
 		api.POST("/backup/setProcessStatus", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.SetProcessStatus)
+
+		// 该接口由客户端通过 post2serverraw 拉取（不做 AES 处理），因此不挂 AES 中间件。
+		api.POST("/blacklist/listBlacklist", middleware.Auth, handler.ListBlacklist)
+
 		api.GET("/updateAppVersion", handler.UpdateAppVersion)
 		api.GET("/getAppVersion", handler.GetAppVersion)
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
