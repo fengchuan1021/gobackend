@@ -32,9 +32,9 @@ type Task struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 
-	User   User   `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	Device Device `gorm:"foreignKey:DeviceID" json:"device,omitempty"`
-	Script Script `gorm:"foreignKey:ScriptID" json:"script,omitempty"`
+	User   User   `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
+	Device Device `gorm:"foreignKey:DeviceID;constraint:-" json:"device,omitempty"`
+	Script Script `gorm:"foreignKey:ScriptID;constraint:-" json:"script,omitempty"`
 }
 
 // TableName 指定表名
