@@ -116,7 +116,7 @@ func Run(port int) {
 
 		switch cmdType {
 		case CmdHeartbeat:
-			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "heartbeat", from)
+
 			serial := string(payload)
 			if serial != "" {
 				clientsMu.Lock()
@@ -124,6 +124,7 @@ func Run(port int) {
 				clientsMu.Unlock()
 			}
 			hasTask := msgID
+			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "heartbeat hasTask", from, hasTask)
 			if hasTask == 0 {
 				//check unstarted task
 				var newTask model.Task
