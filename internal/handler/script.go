@@ -2,6 +2,9 @@ package handler
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -266,7 +269,7 @@ func GetGoScripts(c *gin.Context) {
 	// 解析路径并限制在 baseDir 下，防止路径穿越
 	joined := filepath.Join(baseDir, fileName)
 	cleanPath := filepath.Clean(joined)
-	fmt.Println("cleanPath", cleanPath)
+
 	if !strings.HasPrefix(cleanPath, baseDir) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "路径非法"})
 		return
@@ -287,7 +290,7 @@ func GetGoScripts(c *gin.Context) {
 		return
 	}
 	if info.IsDir() {
-		fmt.Println("file is a directory", cleanPath)
+
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不能是目录"})
 		return
 	}
@@ -300,7 +303,7 @@ func GetGoScripts(c *gin.Context) {
 	} else {
 		relPath = filepath.ToSlash(relPath)
 	}
-	fmt.Println("relPath", relPath)
+
 	if v, ok := goScriptCache.Load(relPath); ok {
 		entry := v.(*goScriptCacheEntry)
 		// 源文件的更新时间小于等于缓存编译时间则直接返回缓存（缓存的是字节码二进制）
@@ -313,22 +316,21 @@ func GetGoScripts(c *gin.Context) {
 	// 输出 .c 路径：同目录下同名 .c（相对 baseDir）
 	relOut := filepath.ToSlash(filepath.Join(filepath.Dir(relPath), filepath.Base(cleanPath[:len(cleanPath)-3])+".c"))
 	absOut := filepath.Join(baseDir, relOut)
-	fmt.Println("relOut", relOut)
 
 	relSrc := filepath.ToSlash(relPath)
 
 	cmd := exec.Command(qjscPath, "-o", relOut, "-m", "-s", "-c", relSrc)
-	fmt.Println("cmd", cmd.String())
+
 	cmd.Dir = baseDir
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
-		fmt.Println("compile failed", err.Error())
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "编译失败", "detail": err.Error()})
 		return
 	}
 
 	cSource, err := os.ReadFile(absOut)
-	fmt.Println("cSource", string(cSource))
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取编译结果失败"})
 		return
@@ -502,4 +504,105 @@ func DeleteScriptCategory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0})
+}
+
+// AddScriptToCategoryReq 从已安装应用添加到脚本分类
+type AddScriptToCategoryReq struct {
+	Name        string `json:"name" binding:"required"`
+	CategoryID  uint   `json:"category_id" binding:"required"`
+	IconBase64  string `json:"icon_base64"`
+	PackageName string `json:"package_name"`
+}
+
+func pickImageExtFromMagic(b []byte) string {
+	if len(b) >= 2 && b[0] == 0xFF && b[1] == 0xD8 {
+		return ".jpg"
+	}
+	if len(b) >= 4 && b[0] == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G' {
+		return ".png"
+	}
+	if len(b) >= 12 && string(b[4:8]) == "WEBP" {
+		return ".webp"
+	}
+	return ".png"
+}
+
+func decodeIconBase64Payload(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	if strings.HasPrefix(s, "data:") {
+		if i := strings.IndexByte(s, ','); i >= 0 {
+			s = s[i+1:]
+		}
+	}
+	return base64.StdEncoding.DecodeString(s)
+}
+
+// AddScriptToCategory 根据应用名称、图标与分类创建脚本占位记录（无脚本文件）
+func AddScriptToCategory(c *gin.Context) {
+	var req AddScriptToCategoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	var category model.ScriptCategory
+	if err := database.DB.First(&category, req.CategoryID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if category.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "分类不存在"})
+		return
+	}
+
+	iconURL := ""
+	rawIcon, err := decodeIconBase64Payload(req.IconBase64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "图标解码失败"})
+		return
+	}
+	if len(rawIcon) > 0 {
+		baseDir := ""
+		if config.Cfg != nil {
+			baseDir = config.Cfg.SOLUTION_DIR
+		}
+		if baseDir == "" {
+			baseDir = "."
+		}
+		imgDir := filepath.Join(baseDir, "antares_assets", "images", "script_icons")
+		if err := os.MkdirAll(imgDir, 0o755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建图标目录失败"})
+			return
+		}
+		var rnd [8]byte
+		if _, err := rand.Read(rnd[:]); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "生成文件名失败"})
+			return
+		}
+		ext := pickImageExtFromMagic(rawIcon)
+		fname := hex.EncodeToString(rnd[:]) + ext
+		fpath := filepath.Join(imgDir, fname)
+		if err := os.WriteFile(fpath, rawIcon, 0o644); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存图标失败"})
+			return
+		}
+		iconURL = "/images/script_icons/" + fname
+	}
+
+	s := model.Script{
+		Name:        req.Name,
+		Description: "",
+		CategoryID:  req.CategoryID,
+		FilePath:    category.FilePath,
+		PackageName: req.PackageName,
+		IconURL:     iconURL,
+	}
+	if err := database.DB.Create(&s).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": s})
 }

@@ -85,6 +85,7 @@ func main() {
 		api.POST("/scripts", middleware.Auth, handler.CreateScript)
 		api.PATCH("/scripts/:id", middleware.Auth, handler.UpdateScript)
 		api.PATCH("/scripts/:id/category", middleware.Auth, handler.UpdateScriptCategoryOnly)
+		api.POST("/scripts/AddScriptToCategory", middleware.Auth, handler.AddScriptToCategory)
 		api.DELETE("/scripts/:id", middleware.Auth, handler.DeleteScript)
 		api.GET("/script_categories", middleware.Auth, handler.ListScriptCategories)
 

@@ -8,6 +8,7 @@ import (
 type ScriptCategory struct {
 	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
+	FilePath    string    `gorm:"type:varchar(255);" json:"file_path"`
 	IsNew       bool      `gorm:"default:false" json:"is_new"`
 	IsHot       bool      `gorm:"default:false" json:"is_hot"`
 	Description string    `gorm:"type:text" json:"description"`
