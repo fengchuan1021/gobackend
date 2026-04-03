@@ -184,6 +184,15 @@ func ClientStopTask(c *gin.Context) {
 	// 	c.JSON(http.StatusOK, gin.H{"code": 500, "msg": ""})
 	// 	return
 	// }
+	//delete from tasks where device_serial in (?) and status=1
+	if len(req.Serials) == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serials is empty"})
+		return
+	}
+	if err := database.DB.Where("device_serial in (?) and status=1", req.Serials).Delete(&model.Task{}).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "delete task failed"})
+		return
+	}
 	for _, serial := range req.Serials {
 		go udpserver.SendCommand(serial, udpserver.CmdStopTask, []byte(""))
 	}
