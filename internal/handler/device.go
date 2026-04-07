@@ -346,3 +346,34 @@ func GetWhitelistApps(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps})
 }
+func SaveProfileNote(c *gin.Context) {
+	serial := c.Param("serial")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
+		return
+	}
+	var req struct {
+		Note string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
+		return
+	}
+	database.DB.Model(&model.Device{}).Where("serial = ?", serial).Update("note", req.Note)
+	c.JSON(http.StatusOK, gin.H{"msg": "保存成功"})
+}
+func GetProfileNote(c *gin.Context) {
+	serial := c.Param("serial")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
+		return
+	}
+	var device model.Device
+	err := database.DB.Where("serial = ?", serial).First(&device).Error
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "设备不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": device.Note})
+
+}

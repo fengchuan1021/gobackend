@@ -100,6 +100,9 @@ func main() {
 		api.POST("/device/gettrickeystoreconfig", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTrickStoreConfig)
 		api.POST("/device/getwhitelistapps", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetWhitelistApps)
 		api.GET("/devices/expireTime", middleware.Auth, handler.GetDeviceExpireTime)
+		api.POST("/devices/save_profile_note/:serial", middleware.Auth, handler.SaveProfileNote)
+		api.GET("/devices/get_profile_note/:serial", middleware.Auth, handler.GetProfileNote)
+
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)
 		api.POST("/user/activate", middleware.Auth, handler.ActivateUser)
