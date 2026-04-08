@@ -10,6 +10,7 @@ import (
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
+	"gobackend/internal/udpserver"
 	"gobackend/internal/websocket"
 
 	"github.com/gin-gonic/gin"
@@ -376,4 +377,14 @@ func GetProfileNote(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": device.Note})
 
+}
+func ResetDeviceBySerial(c *gin.Context) {
+	serial := c.Param("serial")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
+		return
+	}
+	go udpserver.SendCommand(serial, udpserver.CmdResetDevice, []byte(""))
+
+	c.JSON(http.StatusOK, gin.H{"msg": "重置成功"})
 }
