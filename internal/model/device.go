@@ -12,6 +12,7 @@ type Device struct {
 	UserID    uint       `gorm:"index;not null;default:0" json:"user_id"`
 	Username  string     `gorm:"type:varchar(64)" json:"username"`
 	ExpireAt  *time.Time `gorm:"index" json:"expire_at"`
+	Note      string     `gorm:"type:text" json:"note"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 

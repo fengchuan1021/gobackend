@@ -27,6 +27,7 @@ const (
 	CmdRunTaskScript    = 7
 	CmdStopTask         = 8
 	CmdBackupApps       = 9
+	CmdResetDevice      = 10
 )
 
 var (
@@ -163,6 +164,14 @@ func DeliverResult(msgID uint32, payload []byte) bool {
 
 // SendCommand 向指定序列号的设备发送 UDP 命令，通过 sync.Map + channel 等待结果
 func SendCommand(serial string, cmdType uint32, payload []byte) ([]byte, error) {
+	var device model.Device
+	err := database.DB.Where("serial = ?", serial).First(&device).Error
+	if err != nil {
+		return nil, fmt.Errorf("device %s not found", serial)
+	}
+	if device.ExpireAt == nil || device.ExpireAt.Before(time.Now()) {
+		return nil, fmt.Errorf("device %s expired", serial)
+	}
 	msgID := NextMsgID()
 	clientsMu.RLock()
 	addr, ok := clients[serial]
