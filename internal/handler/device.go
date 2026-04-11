@@ -364,7 +364,7 @@ func SaveProfileNote(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"msg": "保存成功"})
 }
 func GetProfileNote(c *gin.Context) {
-	serial := c.Param("serial")
+	serial := c.Query("serial")
 	if serial == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
 		return
