@@ -348,7 +348,7 @@ func GetWhitelistApps(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps})
 }
 func SaveProfileNote(c *gin.Context) {
-	serial := c.Param("serial")
+	serial := c.Query("serial")
 	if serial == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
 		return
