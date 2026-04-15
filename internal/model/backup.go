@@ -13,7 +13,7 @@ const (
 
 type Backup struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	Serial    string    `gorm:"column:serial;type:varchar(128);uniqueIndex;not null" json:"serial"`
+	Serial    string    `gorm:"column:serial;type:varchar(128);index;not null" json:"serial"`
 	Pkgs      string    `gorm:"type:varchar(1024)" json:"pkgs"`
 	Status    int       `gorm:"default:0" json:"status"`
 	Progress  int       `gorm:"default:0" json:"progress"`
