@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,6 +46,109 @@ type ConnInfo struct {
 	LastHeartbeat time.Time
 }
 
+// TaskDevicesByUserIP 维护「用户 ID → 设备所在 IP → 正在执行任务的设备 serial」。
+// IP 建议使用与 ConnInfo.Ip 一致的规范化字符串（如 net.IP.String()），便于与在线信息对齐。
+type TaskDevicesByUserIP struct {
+	mu     sync.RWMutex
+	byUser map[uint]map[string]map[string]struct{} // userID -> ip -> serials
+}
+
+func NewTaskDevicesByUserIP() *TaskDevicesByUserIP {
+	return &TaskDevicesByUserIP{
+		byUser: make(map[uint]map[string]map[string]struct{}),
+	}
+}
+
+// Add 将设备标记为该用户、该 IP 下正在执行任务（同一 serial 重复添加不增加数量）。
+func (t *TaskDevicesByUserIP) Add(userID uint, ip, serial string) {
+	if t == nil || serial == "" || ip == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	byIP := t.byUser[userID]
+	if byIP == nil {
+		byIP = make(map[string]map[string]struct{})
+		t.byUser[userID] = byIP
+	}
+	set := byIP[ip]
+	if set == nil {
+		set = make(map[string]struct{})
+		byIP[ip] = set
+	}
+	set[serial] = struct{}{}
+}
+
+// remoteBySerial 在已持有 t.mu 的前提下，遍历该用户下所有 IP 的 serial 集合，删除匹配的 serial（IP 变更后可能挂在旧 IP 下）。
+func (t *TaskDevicesByUserIP) remoteBySerial(userID uint, serial string) {
+	if t == nil || serial == "" {
+		return
+	}
+	byIP, ok := t.byUser[userID]
+	if !ok {
+		return
+	}
+	for ip, set := range byIP {
+		if _, found := set[serial]; !found {
+			continue
+		}
+		delete(set, serial)
+		if len(set) == 0 {
+			delete(byIP, ip)
+		}
+	}
+	if len(byIP) == 0 {
+		delete(t.byUser, userID)
+	}
+}
+
+// Remove 取消该用户、该 IP 下某设备的正在执行标记。
+func (t *TaskDevicesByUserIP) Remove(userID uint, ip, serial string) {
+	if t == nil || serial == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	byIP, ok := t.byUser[userID]
+	if !ok {
+		return
+	}
+	set, ok := byIP[ip]
+	if !ok {
+		t.remoteBySerial(userID, serial)
+		return
+	}
+	if _, has := set[serial]; !has {
+		t.remoteBySerial(userID, serial)
+		return
+	}
+	delete(set, serial)
+	if len(set) == 0 {
+		delete(byIP, ip)
+	}
+	if len(byIP) == 0 {
+		delete(t.byUser, userID)
+	}
+}
+
+// RunningCount 返回指定用户、指定 IP 下正在执行任务的设备数量（按 serial 去重）。
+func (t *TaskDevicesByUserIP) RunningCount(userID uint, ip string) int {
+	if t == nil || ip == "" {
+		return 0
+	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	byIP, ok := t.byUser[userID]
+	if !ok {
+		return 0
+	}
+	set, ok := byIP[ip]
+	if !ok {
+		return 0
+	}
+	return len(set)
+}
+
 var (
 	clients   = make(map[string]*ConnInfo)
 	clientsMu sync.RWMutex
@@ -55,9 +159,13 @@ var (
 
 	heartbeatCh chan heartbeatJob
 	heartbeatWG sync.WaitGroup
+
+	// TaskDevices 全局：按用户与设备 IP 统计当前正在执行任务的设备，供限流或展示使用。
+	TaskDevices = NewTaskDevicesByUserIP()
 )
 
 type heartbeatJob struct {
+	uid     uint
 	serial  string
 	hasTask uint32
 	from    *net.UDPAddr
@@ -112,19 +220,19 @@ func cloneUDPAddr(a *net.UDPAddr) *net.UDPAddr {
 	return &b
 }
 
-func registerHeartbeatClient(serial string, from *net.UDPAddr) {
-	if serial == "" {
+func registerHeartbeatClient(job *heartbeatJob) {
+	if job.serial == "" {
 		return
 	}
 	clientsMu.Lock()
-	if ci, ok := clients[serial]; ok {
-		ci.Conn = from
-		ci.Ip = from.IP.String()
+	if ci, ok := clients[job.serial]; ok {
+		ci.Conn = job.from
+		ci.Ip = job.from.IP.String()
 		ci.LastHeartbeat = time.Now()
 	} else {
-		clients[serial] = &ConnInfo{
-			Conn:          from,
-			Ip:            from.IP.String(),
+		clients[job.serial] = &ConnInfo{
+			Conn:          job.from,
+			Ip:            job.from.IP.String(),
 			LastHeartbeat: time.Now(),
 		}
 	}
@@ -157,22 +265,25 @@ func staleClientCleanupLoop(ctx context.Context) {
 }
 
 // maybeRunPendingTaskFromHeartbeat 在设备空闲心跳时检查是否有待运行任务并下发
-func maybeRunPendingTaskFromHeartbeat(serial string, hasTask uint32) {
-	if hasTask != 0 {
+func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
+	if job.hasTask != 0 {
+		TaskDevices.Add(job.uid, job.from.IP.String(), job.serial)
 		return
+	} else {
+		TaskDevices.Remove(job.uid, job.from.IP.String(), job.serial)
 	}
 	var newTask model.Task
-	if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=3 or status=1)", serial).Order("left_round desc").First(&newTask).Error; err != nil {
+	if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=3 or status=1)", job.serial).Order("left_round desc").First(&newTask).Error; err != nil {
 		return
 	}
 	if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(time.Now()) && newTask.ID != 0 {
-		go SendCommand(serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), newTask.Device.UserID)
+		go SendCommand(job.serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), job.uid)
 	}
 }
 
 func handleHeartbeatJob(c *net.UDPConn, job heartbeatJob) {
-	registerHeartbeatClient(job.serial, job.from)
-	maybeRunPendingTaskFromHeartbeat(job.serial, job.hasTask)
+	registerHeartbeatClient(&job)
+	maybeRunPendingTaskFromHeartbeat(&job)
 	if _, err := c.WriteToUDP(heartbeatAckPacket, job.from); err != nil {
 		log.Printf("UDP heartbeat reply failed: %v", err)
 	}
@@ -250,8 +361,18 @@ func Run(port int) {
 
 		switch cmdType {
 		case CmdHeartbeat:
-			serial := string(append([]byte(nil), payload...))
+			serialAndUid := string(append([]byte(nil), payload...))
+			serialAndUidSplit := strings.Split(serialAndUid, ",")
+			if len(serialAndUidSplit) != 2 {
+				continue
+			}
+			serial := serialAndUidSplit[0]
+			uid, err := strconv.ParseUint(serialAndUidSplit[1], 10, 32)
+			if err != nil {
+				continue
+			}
 			job := heartbeatJob{
+				uid:     uint(uid),
 				serial:  serial,
 				hasTask: msgID,
 				from:    cloneUDPAddr(from),
