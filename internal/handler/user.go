@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
+	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -276,6 +278,11 @@ func SaveIpGroupLimit(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "保存失败"})
 		return
 	}
+	uidInt, err := strconv.ParseUint(uid, 10, 32)
+	if err == nil {
+		udpserver.UpdateMaxDevicesPerIp(uint(uidInt), req.MaxDevicesPerIp)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"msg": "保存成功"})
 }
 

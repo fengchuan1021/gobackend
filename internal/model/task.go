@@ -12,6 +12,7 @@ const (
 	TaskStatusRoundEnd    = 3 // 轮次结束
 	TaskStatusAbnormalEnd = 4 // 异常结束
 	TaskStatusTimeout     = 5 // 超时结束
+	TaskStatusOnHold      = 6 // 挂起
 )
 
 // Task 任务模型

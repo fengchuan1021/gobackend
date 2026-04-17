@@ -3,6 +3,7 @@ package udpserver
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -14,6 +15,8 @@ import (
 
 	"gobackend/internal/database"
 	"gobackend/internal/model"
+
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -46,107 +49,91 @@ type ConnInfo struct {
 	LastHeartbeat time.Time
 }
 
-// TaskDevicesByUserIP 维护「用户 ID → 设备所在 IP → 正在执行任务的设备 serial」。
-// IP 建议使用与 ConnInfo.Ip 一致的规范化字符串（如 net.IP.String()），便于与在线信息对齐。
-type TaskDevicesByUserIP struct {
-	mu     sync.RWMutex
-	byUser map[uint]map[string]map[string]struct{} // userID -> ip -> serials
+const (
+	OnlineDevicePrefix = "onlinedevice:"
+	UserIpDeviceHash   = "user:"
+	SerialIPKeyPrefix  = "serial-ip:user:"
+
+	maxDevicesPerIPCacheKeyFmt = "udpserver:maxdevicesperip:%d"
+)
+
+func maxDevicesPerIpCacheTTL(limit int) time.Duration {
+	if limit == 0 {
+		return 5 * time.Minute
+	}
+	return 10 * time.Minute
 }
 
-func NewTaskDevicesByUserIP() *TaskDevicesByUserIP {
-	return &TaskDevicesByUserIP{
-		byUser: make(map[uint]map[string]map[string]struct{}),
-	}
+func redisRunningKey(userID uint, ip string) string {
+	return fmt.Sprintf("%s%d:ip:%s", UserIpDeviceHash, userID, ip)
 }
 
-// Add 将设备标记为该用户、该 IP 下正在执行任务（同一 serial 重复添加不增加数量）。
-func (t *TaskDevicesByUserIP) Add(userID uint, ip, serial string) {
-	if t == nil || serial == "" || ip == "" {
-		return
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	byIP := t.byUser[userID]
-	if byIP == nil {
-		byIP = make(map[string]map[string]struct{})
-		t.byUser[userID] = byIP
-	}
-	set := byIP[ip]
-	if set == nil {
-		set = make(map[string]struct{})
-		byIP[ip] = set
-	}
-	set[serial] = struct{}{}
+func redisSerialIPKey(userID uint) string {
+	return fmt.Sprintf("%s%d", SerialIPKeyPrefix, userID)
 }
 
-// remoteBySerial 在已持有 t.mu 的前提下，遍历该用户下所有 IP 的 serial 集合，删除匹配的 serial（IP 变更后可能挂在旧 IP 下）。
-func (t *TaskDevicesByUserIP) remoteBySerial(userID uint, serial string) {
-	if t == nil || serial == "" {
-		return
+func upsertRunningDeviceInRedis(ctx context.Context, userID uint, ip, serial string) error {
+	if userID == 0 || ip == "" || serial == "" {
+		return nil
 	}
-	byIP, ok := t.byUser[userID]
-	if !ok {
-		return
+	ipMapKey := redisSerialIPKey(userID)
+	oldIP, err := database.RDB.HGet(ctx, ipMapKey, serial).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return err
 	}
-	for ip, set := range byIP {
-		if _, found := set[serial]; !found {
-			continue
-		}
-		delete(set, serial)
-		if len(set) == 0 {
-			delete(byIP, ip)
+	if oldIP != "" && oldIP != ip {
+		if err := database.RDB.ZRem(ctx, redisRunningKey(userID, oldIP), serial).Err(); err != nil {
+			return err
 		}
 	}
-	if len(byIP) == 0 {
-		delete(t.byUser, userID)
+	expireAt := time.Now().Add(clientStaleTimeout).Unix()
+	if err := database.RDB.ZAdd(ctx, redisRunningKey(userID, ip), redis.Z{
+		Score:  float64(expireAt),
+		Member: serial,
+	}).Err(); err != nil {
+		return err
 	}
+	if err := database.RDB.Expire(ctx, redisRunningKey(userID, ip), clientStaleTimeout).Err(); err != nil {
+		return err
+	}
+	if err := database.RDB.HSet(ctx, ipMapKey, serial, ip).Err(); err != nil {
+		return err
+	}
+	return database.RDB.Expire(ctx, ipMapKey, clientStaleTimeout).Err()
 }
 
-// Remove 取消该用户、该 IP 下某设备的正在执行标记。
-func (t *TaskDevicesByUserIP) Remove(userID uint, ip, serial string) {
-	if t == nil || serial == "" {
-		return
+func removeRunningDeviceFromRedis(ctx context.Context, userID uint, ip, serial string) error {
+	if userID == 0 || serial == "" {
+		return nil
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	byIP, ok := t.byUser[userID]
-	if !ok {
-		return
+	ipMapKey := redisSerialIPKey(userID)
+	oldIP, err := database.RDB.HGet(ctx, ipMapKey, serial).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return err
 	}
-	set, ok := byIP[ip]
-	if !ok {
-		t.remoteBySerial(userID, serial)
-		return
+	targetIP := ip
+	if oldIP != "" {
+		targetIP = oldIP
 	}
-	if _, has := set[serial]; !has {
-		t.remoteBySerial(userID, serial)
-		return
+	if targetIP != "" {
+		if err := database.RDB.ZRem(ctx, redisRunningKey(userID, targetIP), serial).Err(); err != nil {
+			return err
+		}
 	}
-	delete(set, serial)
-	if len(set) == 0 {
-		delete(byIP, ip)
-	}
-	if len(byIP) == 0 {
-		delete(t.byUser, userID)
-	}
+	return database.RDB.HDel(ctx, ipMapKey, serial).Err()
 }
 
-// RunningCount 返回指定用户、指定 IP 下正在执行任务的设备数量（按 serial 去重）。
-func (t *TaskDevicesByUserIP) RunningCount(userID uint, ip string) int {
-	if t == nil || ip == "" {
-		return 0
+// RunningTaskDeviceCount 返回指定 userID + ip 下、未过期的运行中设备数量。
+func RunningTaskDeviceCount(ctx context.Context, userID uint, ip string) (int64, error) {
+	if userID == 0 || ip == "" {
+		return 0, nil
 	}
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	byIP, ok := t.byUser[userID]
-	if !ok {
-		return 0
+	key := redisRunningKey(userID, ip)
+	nowUnix := time.Now().Unix()
+	if err := database.RDB.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(nowUnix, 10)).Err(); err != nil {
+		return 0, err
 	}
-	set, ok := byIP[ip]
-	if !ok {
-		return 0
-	}
-	return len(set)
+	return database.RDB.ZCard(ctx, key).Result()
 }
 
 var (
@@ -159,9 +146,6 @@ var (
 
 	heartbeatCh chan heartbeatJob
 	heartbeatWG sync.WaitGroup
-
-	// TaskDevices 全局：按用户与设备 IP 统计当前正在执行任务的设备，供限流或展示使用。
-	TaskDevices = NewTaskDevicesByUserIP()
 )
 
 type heartbeatJob struct {
@@ -224,6 +208,10 @@ func registerHeartbeatClient(job *heartbeatJob) {
 	if job.serial == "" {
 		return
 	}
+	ctx := context.Background()
+	if err := database.RDB.Set(ctx, OnlineDevicePrefix+job.serial, job.from.IP.String(), clientStaleTimeout).Err(); err != nil {
+		log.Printf("set online device ttl failed serial=%s err=%v", job.serial, err)
+	}
 	clientsMu.Lock()
 	if ci, ok := clients[job.serial]; ok {
 		ci.Conn = job.from
@@ -263,17 +251,67 @@ func staleClientCleanupLoop(ctx context.Context) {
 		}
 	}
 }
+func UpdateMaxDevicesPerIp(userID uint, limit int) {
+	if userID == 0 {
+		return
+	}
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf(maxDevicesPerIPCacheKeyFmt, userID)
+	database.RDB.Set(ctx, cacheKey, strconv.Itoa(limit), maxDevicesPerIpCacheTTL(limit))
+	if err := database.RDB.Set(ctx, cacheKey, strconv.Itoa(limit), maxDevicesPerIpCacheTTL(limit)).Err(); err != nil {
+		log.Printf("set max devices per ip failed userID=%d limit=%d err=%v", userID, limit, err)
+	}
+
+}
+func getMaxDevicesPerIp(userID uint) int {
+	if userID == 0 {
+		return 0
+	}
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf(maxDevicesPerIPCacheKeyFmt, userID)
+	if database.RDB != nil {
+		if s, err := database.RDB.Get(ctx, cacheKey).Result(); err == nil && s != "" {
+			if n, err := strconv.Atoi(s); err == nil {
+				return n
+			}
+		}
+	}
+	var user model.User
+	if err := database.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		return 0
+	}
+	limit := user.MaxDevicesPerIp
+	if database.RDB != nil {
+		_ = database.RDB.Set(ctx, cacheKey, strconv.Itoa(limit), maxDevicesPerIpCacheTTL(limit)).Err()
+	}
+	return limit
+}
 
 // maybeRunPendingTaskFromHeartbeat 在设备空闲心跳时检查是否有待运行任务并下发
 func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
+	ctx := context.Background()
 	if job.hasTask != 0 {
-		TaskDevices.Add(job.uid, job.from.IP.String(), job.serial)
+		if err := upsertRunningDeviceInRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
+			log.Printf("upsert running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
+		}
 		return
 	} else {
-		TaskDevices.Remove(job.uid, job.from.IP.String(), job.serial)
+		if err := removeRunningDeviceFromRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
+			log.Printf("remove running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
+		}
+	}
+	n := getMaxDevicesPerIp(job.uid)
+	if n > 0 {
+		count, err := RunningTaskDeviceCount(ctx, job.uid, job.from.IP.String())
+		if err != nil {
+			log.Printf("get running task device count failed uid=%d ip=%s err=%v", job.uid, job.from.IP.String(), err)
+		}
+		if count >= int64(n) {
+			return
+		}
 	}
 	var newTask model.Task
-	if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=3 or status=1)", job.serial).Order("left_round desc").First(&newTask).Error; err != nil {
+	if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=3 or status=6)", job.serial).Order("status asc,left_round desc").First(&newTask).Error; err != nil {
 		return
 	}
 	if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(time.Now()) && newTask.ID != 0 {
@@ -363,6 +401,7 @@ func Run(port int) {
 		case CmdHeartbeat:
 			serialAndUid := string(append([]byte(nil), payload...))
 			serialAndUidSplit := strings.Split(serialAndUid, ",")
+
 			if len(serialAndUidSplit) != 2 {
 				continue
 			}
@@ -404,11 +443,14 @@ func DeliverResult(msgID uint32, payload []byte) bool {
 // SendCommand 向指定序列号的设备发送 UDP 命令，通过 sync.Map + channel 等待结果
 func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]byte, error) {
 	var device model.Device
+	fmt.Printf("SendCommand serial=%s cmdType=%d payload=%s userID=%d\n", serial, cmdType, string(payload), userID)
 	err := database.DB.Preload("User").Where("serial = ?", serial).First(&device).Error
 	if err != nil {
+		fmt.Printf("device %s not found err=%v\n", serial, err)
 		return nil, fmt.Errorf("device %s not found", serial)
 	}
 	if device.ExpireAt == nil || device.ExpireAt.Before(time.Now()) {
+		fmt.Printf("device %s expired\n", serial)
 		return nil, fmt.Errorf("device %s expired", serial)
 	}
 	msgID := NextMsgID()
@@ -420,6 +462,7 @@ func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]
 	}
 	clientsMu.RUnlock()
 	if !ok || udpAddr == nil {
+		fmt.Printf("device %s not online\n", serial)
 		return nil, fmt.Errorf("device %s not online", serial)
 	}
 
@@ -427,9 +470,26 @@ func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]
 	c := conn
 	connMu.RUnlock()
 	if c == nil {
+		fmt.Printf("UDP server not ready\n")
 		return nil, fmt.Errorf("UDP server not ready")
 	}
+	if cmdType == CmdRunTaskScript {
+		count, err := RunningTaskDeviceCount(context.Background(), userID, udpAddr.IP.String())
+		if err != nil {
+			fmt.Printf("get running task device count failed uid=%d ip=%s err=%v\n", userID, udpAddr.IP.String(), err)
+			return nil, fmt.Errorf("get running task device count failed uid=%d ip=%s err=%v", userID, udpAddr.IP.String(), err)
+		}
 
+		if device.User.MaxDevicesPerIp > 0 && count >= int64(device.User.MaxDevicesPerIp) {
+			fmt.Printf("running task device count is too many uid=%d ip=%s count=%d max=%d\n", userID, udpAddr.IP.String(), count, device.User.MaxDevicesPerIp)
+			return nil, fmt.Errorf("running task device count is too many uid=%d ip=%s count=%d max=%d", userID, udpAddr.IP.String(), count, device.User.MaxDevicesPerIp)
+		}
+		if err := upsertRunningDeviceInRedis(context.Background(), userID, udpAddr.IP.String(), serial); err != nil {
+			fmt.Printf("upsert running device failed uid=%d ip=%s serial=%s err=%v\n", userID, udpAddr.IP.String(), serial, err)
+			return nil, fmt.Errorf("upsert running device failed uid=%d ip=%s serial=%s err=%v", userID, udpAddr.IP.String(), serial, err)
+		}
+
+	}
 	ch := make(chan []byte, 1)
 	pending.Store(msgID, ch)
 	defer pending.Delete(msgID)
