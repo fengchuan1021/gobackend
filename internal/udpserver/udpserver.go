@@ -1,6 +1,7 @@
 package udpserver
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -12,6 +13,14 @@ import (
 
 	"gobackend/internal/database"
 	"gobackend/internal/model"
+)
+
+const (
+	heartbeatWorkerCount = 8
+	heartbeatQueueSize   = 256
+
+	clientStaleTimeout       = 40 * time.Second
+	clientStaleSweepInterval = 1 * time.Minute
 )
 
 const (
@@ -30,14 +39,29 @@ const (
 	CmdResetDevice      = 10
 )
 
+type ConnInfo struct {
+	Conn          *net.UDPAddr
+	Ip            string
+	LastHeartbeat time.Time
+}
+
 var (
-	clients   = make(map[string]*net.UDPAddr)
+	clients   = make(map[string]*ConnInfo)
 	clientsMu sync.RWMutex
 	conn      *net.UDPConn
 	connMu    sync.RWMutex
 	pending   sync.Map // msgID (uint32) -> chan []byte
 	nextMsgID uint32   = 1
+
+	heartbeatCh chan heartbeatJob
+	heartbeatWG sync.WaitGroup
 )
+
+type heartbeatJob struct {
+	serial  string
+	hasTask uint32
+	from    *net.UDPAddr
+}
 
 func parsePacket(buf []byte) (magic uint32, length uint32, cmdType uint32, messageID uint32, payload []byte, ok bool) {
 	if len(buf) < HeaderSize {
@@ -69,9 +93,111 @@ func buildPacket(cmdType uint32, messageID uint32, payload []byte) []byte {
 	return buf
 }
 
+// heartbeatAckPacket 即 buildPacket(CmdHeartbeat, 0, nil)，只分配一次供心跳回复复用
+var heartbeatAckPacket = buildPacket(CmdHeartbeat, 0, nil)
+
 // NextMsgID 获取下一个消息 ID
 func NextMsgID() uint32 {
 	return atomic.AddUint32(&nextMsgID, 1)
+}
+
+func cloneUDPAddr(a *net.UDPAddr) *net.UDPAddr {
+	if a == nil {
+		return nil
+	}
+	b := *a
+	if len(a.IP) > 0 {
+		b.IP = append(net.IP(nil), a.IP...)
+	}
+	return &b
+}
+
+func registerHeartbeatClient(serial string, from *net.UDPAddr) {
+	if serial == "" {
+		return
+	}
+	clientsMu.Lock()
+	if ci, ok := clients[serial]; ok {
+		ci.Conn = from
+		ci.Ip = from.IP.String()
+		ci.LastHeartbeat = time.Now()
+	} else {
+		clients[serial] = &ConnInfo{
+			Conn:          from,
+			Ip:            from.IP.String(),
+			LastHeartbeat: time.Now(),
+		}
+	}
+	clientsMu.Unlock()
+}
+
+// pruneStaleClients 删除 LastHeartbeat 早于 clientStaleTimeout 的在线记录
+func pruneStaleClients() {
+	now := time.Now()
+	clientsMu.Lock()
+	for serial, ci := range clients {
+		if ci == nil || now.Sub(ci.LastHeartbeat) > clientStaleTimeout {
+			delete(clients, serial)
+		}
+	}
+	clientsMu.Unlock()
+}
+
+func staleClientCleanupLoop(ctx context.Context) {
+	ticker := time.NewTicker(clientStaleSweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pruneStaleClients()
+		}
+	}
+}
+
+// maybeRunPendingTaskFromHeartbeat 在设备空闲心跳时检查是否有待运行任务并下发
+func maybeRunPendingTaskFromHeartbeat(serial string, hasTask uint32) {
+	if hasTask != 0 {
+		return
+	}
+	var newTask model.Task
+	if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=3 or status=1)", serial).Order("left_round desc").First(&newTask).Error; err != nil {
+		return
+	}
+	if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(time.Now()) && newTask.ID != 0 {
+		go SendCommand(serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), newTask.Device.UserID)
+	}
+}
+
+func handleHeartbeatJob(c *net.UDPConn, job heartbeatJob) {
+	registerHeartbeatClient(job.serial, job.from)
+	maybeRunPendingTaskFromHeartbeat(job.serial, job.hasTask)
+	if _, err := c.WriteToUDP(heartbeatAckPacket, job.from); err != nil {
+		log.Printf("UDP heartbeat reply failed: %v", err)
+	}
+}
+
+func startHeartbeatWorkers(c *net.UDPConn) {
+	heartbeatCh = make(chan heartbeatJob, heartbeatQueueSize)
+	for i := 0; i < heartbeatWorkerCount; i++ {
+		heartbeatWG.Add(1)
+		go func() {
+			defer heartbeatWG.Done()
+			for job := range heartbeatCh {
+				handleHeartbeatJob(c, job)
+			}
+		}()
+	}
+}
+
+func stopHeartbeatWorkers() {
+	if heartbeatCh == nil {
+		return
+	}
+	close(heartbeatCh)
+	heartbeatWG.Wait()
+	heartbeatCh = nil
 }
 
 // Run 启动 UDP 服务
@@ -97,6 +223,13 @@ func Run(port int) {
 		connMu.Unlock()
 	}()
 
+	startHeartbeatWorkers(c)
+	defer stopHeartbeatWorkers()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go staleClientCleanupLoop(ctx)
+
 	log.Printf("UDP server listening on :%d", port)
 
 	buf := make([]byte, 65536)
@@ -117,28 +250,13 @@ func Run(port int) {
 
 		switch cmdType {
 		case CmdHeartbeat:
-
-			serial := string(payload)
-			if serial != "" {
-				clientsMu.Lock()
-				clients[serial] = from
-				clientsMu.Unlock()
+			serial := string(append([]byte(nil), payload...))
+			job := heartbeatJob{
+				serial:  serial,
+				hasTask: msgID,
+				from:    cloneUDPAddr(from),
 			}
-			hasTask := msgID
-			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "heartbeat hasTask", from, hasTask)
-			if hasTask == 0 {
-				//check unstarted task
-				var newTask model.Task
-				if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=3 or status=1)", serial).Order("left_round desc").First(&newTask).Error; err != nil {
-
-				}
-				if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(time.Now()) && newTask.ID != 0 {
-					go SendCommand(serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))))
-
-				}
-			}
-			resp := buildPacket(CmdHeartbeat, 0, nil)
-			c.WriteToUDP(resp, from)
+			heartbeatCh <- job
 		case CmdAck:
 			// 忽略 ACK，命令结果通过 HTTP /udp/cmdcallback 返回
 		}
@@ -163,9 +281,9 @@ func DeliverResult(msgID uint32, payload []byte) bool {
 }
 
 // SendCommand 向指定序列号的设备发送 UDP 命令，通过 sync.Map + channel 等待结果
-func SendCommand(serial string, cmdType uint32, payload []byte) ([]byte, error) {
+func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]byte, error) {
 	var device model.Device
-	err := database.DB.Where("serial = ?", serial).First(&device).Error
+	err := database.DB.Preload("User").Where("serial = ?", serial).First(&device).Error
 	if err != nil {
 		return nil, fmt.Errorf("device %s not found", serial)
 	}
@@ -174,9 +292,13 @@ func SendCommand(serial string, cmdType uint32, payload []byte) ([]byte, error) 
 	}
 	msgID := NextMsgID()
 	clientsMu.RLock()
-	addr, ok := clients[serial]
+	info, ok := clients[serial]
+	var udpAddr *net.UDPAddr
+	if ok && info != nil {
+		udpAddr = info.Conn
+	}
 	clientsMu.RUnlock()
-	if !ok {
+	if !ok || udpAddr == nil {
 		return nil, fmt.Errorf("device %s not online", serial)
 	}
 
@@ -191,12 +313,12 @@ func SendCommand(serial string, cmdType uint32, payload []byte) ([]byte, error) 
 	pending.Store(msgID, ch)
 	defer pending.Delete(msgID)
 
-	const respTimeout = 30 * time.Second
-	const maxRetries = 3
+	const respTimeout = 3 * time.Second
+	const maxRetries = 4
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		pkt := buildPacket(cmdType, msgID, payload)
-		if _, err := c.WriteToUDP(pkt, addr); err != nil {
+		if _, err := c.WriteToUDP(pkt, udpAddr); err != nil {
 			return nil, err
 		}
 

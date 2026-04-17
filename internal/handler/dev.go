@@ -45,7 +45,7 @@ func GetScreenShot(c *gin.Context) {
 		return
 	}
 
-	data, err := udpserver.SendCommand(serial, udpserver.CmdGetScreenshot, nil)
+	data, err := udpserver.SendCommand(serial, udpserver.CmdGetScreenshot, nil, 0)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "截图获取失败: " + err.Error()})
 		return
@@ -102,7 +102,7 @@ func RunDevScript(c *gin.Context) {
 		return
 	}
 
-	data, err := udpserver.SendCommand(req.Serial, udpserver.CmdExecuteDevScript, []byte(scriptID))
+	data, err := udpserver.SendCommand(req.Serial, udpserver.CmdExecuteDevScript, []byte(scriptID), 0)
 	if err != nil {
 		fmt.Println("RunDevScript error:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "执行脚本失败: " + err.Error()})
@@ -140,7 +140,7 @@ func GetXmlLayout(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "serial 参数必填"})
 		return
 	}
-	data, err := udpserver.SendCommand(serial, udpserver.CmdGetXmlLayout, nil)
+	data, err := udpserver.SendCommand(serial, udpserver.CmdGetXmlLayout, nil, 0)
 	if err != nil {
 		fmt.Println("GetXmlLayout error:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取 XML 布局失败: " + err.Error()})
