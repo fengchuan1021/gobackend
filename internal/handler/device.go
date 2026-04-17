@@ -150,11 +150,12 @@ func SearchDevices(c *gin.Context) {
 	var devices []model.Device
 	var err error
 	if listAll {
-		if roleIDValue != 1 {
-			err = database.DB.Where("user_id = ?", userID).Order("id ASC").Find(&devices).Error
-		} else {
-			err = database.DB.Order("id ASC").Find(&devices).Error
-		}
+		err = database.DB.Where("user_id = ?", userID).Order("id ASC").Find(&devices).Error
+		// if roleIDValue != 1 {
+		// 	err = database.DB.Where("user_id = ?", userID).Order("id ASC").Find(&devices).Error
+		// } else {
+		// 	err = database.DB.Order("id ASC").Find(&devices).Error
+		// }
 
 	} else if serial == "" {
 		c.JSON(http.StatusOK, gin.H{"data": []model.Device{}})
