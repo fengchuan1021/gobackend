@@ -158,6 +158,7 @@ func ClientAddTask(c *gin.Context) {
 			added = true
 		}
 		if task.ID > 0 {
+			fmt.Printf("run task %d for serial %s\n", task.ID, serial)
 			go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(task.ID))), device.UserID)
 		}
 	}
