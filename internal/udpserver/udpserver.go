@@ -3,7 +3,6 @@ package udpserver
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -86,7 +85,10 @@ func upsertRunningDeviceInRedis(ctx context.Context, userID uint, ip, serial str
 	// 		return err
 	// 	}
 	// }
-	if err := database.RDB.HSet(ctx, ipMapKey, serial, ip).Err(); err != nil {
+	if err := database.RDB.HSetEXWithArgs(ctx, ipMapKey, &redis.HSetEXOptions{
+		ExpirationType: redis.HSetEXExpirationEX,
+		ExpirationVal:  int64(clientStaleTimeout / time.Second),
+	}, serial, ip).Err(); err != nil {
 		return err
 	}
 	expireAt := time.Now().Add(clientStaleTimeout).Unix()
@@ -96,32 +98,29 @@ func upsertRunningDeviceInRedis(ctx context.Context, userID uint, ip, serial str
 	}).Err(); err != nil {
 		return err
 	}
-	if err := database.RDB.Expire(ctx, redisRunningKey(userID, ip), clientStaleTimeout).Err(); err != nil {
-		return err
-	}
-
-	return database.RDB.Expire(ctx, ipMapKey, clientStaleTimeout).Err()
+	return database.RDB.Expire(ctx, redisRunningKey(userID, ip), clientStaleTimeout).Err()
 }
 
 func removeRunningDeviceFromRedis(ctx context.Context, userID uint, ip, serial string) error {
-	if userID == 0 || serial == "" {
-		return nil
-	}
-	ipMapKey := redisSerialIPKey(userID)
-	oldIP, err := database.RDB.HGet(ctx, ipMapKey, serial).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
-		return err
-	}
-	targetIP := ip
-	if oldIP != "" {
-		targetIP = oldIP
-	}
-	if targetIP != "" {
-		if err := database.RDB.ZRem(ctx, redisRunningKey(userID, targetIP), serial).Err(); err != nil {
-			return err
-		}
-	}
-	return database.RDB.HDel(ctx, ipMapKey, serial).Err()
+	return nil
+	// if userID == 0 || serial == "" {
+	// 	return nil
+	// }
+	// ipMapKey := redisSerialIPKey(userID)
+	// oldIP, err := database.RDB.HGet(ctx, ipMapKey, serial).Result()
+	// if err != nil && !errors.Is(err, redis.Nil) {
+	// 	return err
+	// }
+	// targetIP := ip
+	// if oldIP != "" {
+	// 	targetIP = oldIP
+	// }
+	// if targetIP != "" {
+	// 	if err := database.RDB.ZRem(ctx, redisRunningKey(userID, targetIP), serial).Err(); err != nil {
+	// 		return err
+	// 	}
+	// }
+	// return database.RDB.HDel(ctx, ipMapKey, serial).Err()
 }
 
 // RunningTaskDeviceCount 返回指定 userID + ip 下、未过期的运行中设备数量。
@@ -297,9 +296,9 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 		}
 		return
 	} else {
-		if err := removeRunningDeviceFromRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
-			log.Printf("remove running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
-		}
+		// if err := removeRunningDeviceFromRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
+		// 	log.Printf("remove running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
+		// }
 	}
 	n := getMaxDevicesPerIp(job.uid)
 	if n > 0 {
