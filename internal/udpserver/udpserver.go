@@ -77,14 +77,17 @@ func upsertRunningDeviceInRedis(ctx context.Context, userID uint, ip, serial str
 		return nil
 	}
 	ipMapKey := redisSerialIPKey(userID)
-	oldIP, err := database.RDB.HGet(ctx, ipMapKey, serial).Result()
-	if err != nil && !errors.Is(err, redis.Nil) {
+	// oldIP, err := database.RDB.HGet(ctx, ipMapKey, serial).Result()
+	// if err != nil && !errors.Is(err, redis.Nil) {
+	// 	return err
+	// }
+	// if oldIP != "" && oldIP != ip {
+	// 	if err := database.RDB.ZRem(ctx, redisRunningKey(userID, oldIP), serial).Err(); err != nil {
+	// 		return err
+	// 	}
+	// }
+	if err := database.RDB.HSet(ctx, ipMapKey, serial, ip).Err(); err != nil {
 		return err
-	}
-	if oldIP != "" && oldIP != ip {
-		if err := database.RDB.ZRem(ctx, redisRunningKey(userID, oldIP), serial).Err(); err != nil {
-			return err
-		}
 	}
 	expireAt := time.Now().Add(clientStaleTimeout).Unix()
 	if err := database.RDB.ZAdd(ctx, redisRunningKey(userID, ip), redis.Z{
@@ -96,9 +99,7 @@ func upsertRunningDeviceInRedis(ctx context.Context, userID uint, ip, serial str
 	if err := database.RDB.Expire(ctx, redisRunningKey(userID, ip), clientStaleTimeout).Err(); err != nil {
 		return err
 	}
-	if err := database.RDB.HSet(ctx, ipMapKey, serial, ip).Err(); err != nil {
-		return err
-	}
+
 	return database.RDB.Expire(ctx, ipMapKey, clientStaleTimeout).Err()
 }
 
