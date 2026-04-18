@@ -31,7 +31,6 @@ func main() {
 		log.Fatalf("MySQL 连接失败: %v", err)
 	}
 	log.Println("MySQL 连接成功")
-
 	// 自动迁移
 	if err := database.DB.AutoMigrate(
 		&model.ScriptCategory{},
@@ -107,6 +106,10 @@ func main() {
 		api.GET("/devices/expireTime", middleware.Auth, handler.GetDeviceExpireTime)
 		api.POST("/devices/save_profile_note", middleware.Auth, handler.SaveProfileNote)
 		api.GET("/devices/get_profile_note", middleware.Auth, handler.GetProfileNote)
+		api.POST("/devices/save_profile_serial", middleware.Auth, handler.SaveProfileSerial)
+		api.GET("/devices/get_profile_serial", middleware.Auth, handler.GetProfileSerial)
+		api.POST("/user/save_ip_group_limit", middleware.Auth, handler.SaveIpGroupLimit)
+		api.GET("/user/get_ip_group_limit", middleware.Auth, handler.GetIpGroupLimit)
 		api.POST("/devices/reset_device/:serial", middleware.Auth, handler.ResetDeviceBySerial)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)

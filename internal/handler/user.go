@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
+	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -253,4 +255,47 @@ func ActivateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "激活成功"})
+}
+
+func SaveIpGroupLimit(c *gin.Context) {
+	uid := c.Query("uid")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 uid"})
+		return
+	}
+	var req struct {
+		MaxDevicesPerIp int `json:"max_devices_per_ip"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("参数错误", err)
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
+		return
+	}
+	fmt.Println("max_devices_per_ip", req.MaxDevicesPerIp)
+	database.DB.Model(&model.User{}).Where("id = ?", uid).Update("max_devices_per_ip", req.MaxDevicesPerIp)
+	if err := database.DB.Error; err != nil {
+		fmt.Println("保存失败", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "保存失败"})
+		return
+	}
+	uidInt, err := strconv.ParseUint(uid, 10, 32)
+	if err == nil {
+		udpserver.UpdateMaxDevicesPerIp(uint(uidInt), req.MaxDevicesPerIp)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"msg": "保存成功"})
+}
+
+func GetIpGroupLimit(c *gin.Context) {
+	uid := c.Query("uid")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 uid"})
+		return
+	}
+	var user model.User
+	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"msg": "用户不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": user.MaxDevicesPerIp})
 }

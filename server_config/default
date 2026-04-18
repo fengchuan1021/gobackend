@@ -28,6 +28,8 @@ server {
 
 	# /api 转发到本机 8080 端口的 golang 服务（含 /api/ws WebSocket）
 	location /api {
+		# 默认 1m，大脚本（如 runDevScript）会 413
+		client_max_body_size 32m;
 		proxy_pass http://127.0.0.1:8080;
 		proxy_http_version 1.1;
 		proxy_set_header Upgrade $http_upgrade;

@@ -158,7 +158,11 @@ func ClientAddTask(c *gin.Context) {
 			added = true
 		}
 		if task.ID > 0 {
-			go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(task.ID))))
+			fmt.Printf("run task %d for serial %s\n", task.ID, serial)
+			if len(req.Serials) == 1 {
+				go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(task.ID))), device.UserID)
+
+			}
 		}
 	}
 
@@ -194,7 +198,7 @@ func ClientStopTask(c *gin.Context) {
 		return
 	}
 	for _, serial := range req.Serials {
-		go udpserver.SendCommand(serial, udpserver.CmdStopTask, []byte(""))
+		go udpserver.SendCommand(serial, udpserver.CmdStopTask, []byte(""), 0)
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
@@ -237,15 +241,15 @@ func ClientFinishTask(c *gin.Context) {
 		task.Status = model.TaskStatusAbnormalEnd
 		database.DB.Save(&task)
 	}
-	var newTask model.Task
-	if err := database.DB.Where("device_serial = ? and (status=0 or status=3 or status=1)", req.Serial).Order("left_round desc").First(&newTask).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task not found"})
-		return
-	}
-	if newTask.ID == 0 {
-		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task not found"})
-		return
-	}
-	go udpserver.SendCommand(req.Serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))))
+	// var newTask model.Task
+	// if err := database.DB.Where("device_serial = ? and (status=0 or status=3 or status=1)", req.Serial).Order("left_round desc").First(&newTask).Error; err != nil {
+	// 	c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task not found"})
+	// 	return
+	// }
+	// if newTask.ID == 0 {
+	// 	c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task not found"})
+	// 	return
+	// }
+	// go udpserver.SendCommand(req.Serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), newTask.UserID)
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }

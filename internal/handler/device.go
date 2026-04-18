@@ -150,11 +150,12 @@ func SearchDevices(c *gin.Context) {
 	var devices []model.Device
 	var err error
 	if listAll {
-		if roleIDValue != 1 {
-			err = database.DB.Where("user_id = ?", userID).Order("id ASC").Find(&devices).Error
-		} else {
-			err = database.DB.Order("id ASC").Find(&devices).Error
-		}
+		err = database.DB.Where("user_id = ?", userID).Order("id ASC").Find(&devices).Error
+		// if roleIDValue != 1 {
+		// 	err = database.DB.Where("user_id = ?", userID).Order("id ASC").Find(&devices).Error
+		// } else {
+		// 	err = database.DB.Order("id ASC").Find(&devices).Error
+		// }
 
 	} else if serial == "" {
 		c.JSON(http.StatusOK, gin.H{"data": []model.Device{}})
@@ -378,13 +379,43 @@ func GetProfileNote(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": device.Note})
 
 }
+func GetProfileSerial(c *gin.Context) {
+	serial := c.Query("serial")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
+		return
+	}
+	var device model.Device
+	err := database.DB.Where("serial = ?", serial).First(&device).Error
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "设备不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": device.ProfileSerial})
+}
+func SaveProfileSerial(c *gin.Context) {
+	serial := c.Query("serial")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
+		return
+	}
+	var req struct {
+		ProfileSerial string `json:"profileSerial"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
+		return
+	}
+	database.DB.Model(&model.Device{}).Where("serial = ?", serial).Update("profile_serial", req.ProfileSerial)
+	c.JSON(http.StatusOK, gin.H{"msg": "保存成功"})
+}
 func ResetDeviceBySerial(c *gin.Context) {
 	serial := c.Param("serial")
 	if serial == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 serial"})
 		return
 	}
-	go udpserver.SendCommand(serial, udpserver.CmdResetDevice, []byte(""))
+	go udpserver.SendCommand(serial, udpserver.CmdResetDevice, []byte(""), 0)
 
 	c.JSON(http.StatusOK, gin.H{"msg": "重置成功"})
 }

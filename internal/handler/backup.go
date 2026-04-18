@@ -43,8 +43,8 @@ func BackupApps(c *gin.Context) {
 		UserID:   userID,
 	}
 	database.DB.Create(&backup)
-	go udpserver.SendCommand(req.Serial, udpserver.CmdBackupApps, []byte(strconv.Itoa(int(backup.ID))+","+strings.Join(req.Pkgs, ",")))
-
+	go udpserver.SendCommand(req.Serial, udpserver.CmdBackupApps, []byte(strconv.Itoa(int(backup.ID))+","+strings.Join(req.Pkgs, ",")), userID)
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
 
 func ListBackups(c *gin.Context) {
