@@ -12,6 +12,8 @@ type Application struct {
 	IconPath    string    `gorm:"type:varchar(512)" json:"icon_path"` // 相对于 antares_assets 的路径，如 images/appicon/xxx.jpg
 	Whitelist   bool      `gorm:"default:false" json:"whitelist"`
 	BackupData  bool      `gorm:"default:false" json:"backup_data"`
+	IsEssential bool      `gorm:"default:false;index" json:"is_essential"`
+	DownloadUrl string    `gorm:"type:varchar(512)" json:"download_url"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

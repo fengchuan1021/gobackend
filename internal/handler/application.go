@@ -38,6 +38,12 @@ type SaveApplicationsReq struct {
 	Apps []ApplicationItem `json:"apps" binding:"required"`
 }
 
+// EssentialAppLite 必备应用列表项（仅对外暴露包名与下载地址）
+type EssentialAppLite struct {
+	PackageName string `json:"package_name"`
+	DownloadUrl string `json:"download_url"`
+}
+
 // ListApplications 获取应用列表（管理端合并已保存的配置用）
 func ListApplications(c *gin.Context) {
 	_, exists := c.Get(middleware.UserIDKey)
@@ -186,4 +192,22 @@ func GetAppVersion(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "version": cfg.Value})
+}
+func GetEssentialApps(c *gin.Context) {
+	var apps []model.Application
+	err := database.DB.Select("package_name", "download_url").Where("is_essential = 1").Find(&apps).Error
+	if err != nil {
+		fmt.Println("获取必备应用列表失败", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "获取失败"})
+		return
+	}
+	out := make([]EssentialAppLite, 0, len(apps))
+	for _, a := range apps {
+		out = append(out, EssentialAppLite{
+			PackageName: a.PackageName,
+			DownloadUrl: a.DownloadUrl,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "data": out})
 }
