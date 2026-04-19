@@ -103,6 +103,32 @@ func Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": LoginResp{Token: token, User: profile}})
 }
 
+// LoginWithSerial 登录
+func LoginWithSerial(c *gin.Context) {
+	var req struct {
+		Serial string `json:"serial" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	var device model.Device
+	if err := database.DB.Preload("User").Where("serial = ?", req.Serial).First(&device).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		return
+	}
+
+	if device.User.IsBanned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "账号已被封禁"})
+		return
+	}
+
+	token := genToken(device.UserID, device.User.RoleID)
+	profile := toProfile(&device.User)
+	c.JSON(http.StatusOK, gin.H{"data": LoginResp{Token: token, User: profile}})
+}
+
 // CreateUserReq 添加用户请求
 type CreateUserReq struct {
 	Username string `json:"username" binding:"required"`
