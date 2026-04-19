@@ -98,6 +98,7 @@ func main() {
 		api.PATCH("/script_categories/:id", middleware.Auth, handler.UpdateScriptCategory)
 		api.DELETE("/script_categories/:id", middleware.Auth, handler.DeleteScriptCategory)
 		api.POST("/user/login", handler.Login)
+		api.POST("/user/loginWithSerial", handler.LoginWithSerial)
 		api.POST("/user/register", handler.Register)
 		api.POST("/devices/register", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.RegisterDevice)
 		api.POST("/devices/:serial/appendLog", handler.AppendLog)
