@@ -494,7 +494,7 @@ func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]
 	pending.Store(msgID, ch)
 	defer pending.Delete(msgID)
 
-	const respTimeout = 3 * time.Second
+	const respTimeout = 6 * time.Second
 	const maxRetries = 4
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
