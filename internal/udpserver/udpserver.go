@@ -311,10 +311,14 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 		}
 	}
 	var newTask model.Task
-	if err := database.DB.Preload("Device").Where("device_serial = ? and (status=0 or status=6)", job.serial).First(&newTask).Error; err != nil {
+	now := time.Now()
+	if err := database.DB.Preload("Device").Where(
+		"device_serial = ? and (status=0 or status=6) and (on_hold_end_time IS NULL OR on_hold_end_time > ?)",
+		job.serial, now,
+	).First(&newTask).Error; err != nil {
 		return
 	}
-	if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(time.Now()) && newTask.ID != 0 {
+	if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(now) && newTask.ID != 0 {
 		go SendCommand(job.serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), job.uid)
 	}
 }
