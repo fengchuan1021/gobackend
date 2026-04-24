@@ -294,6 +294,7 @@ func GetGoScripts(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不能是目录"})
 		return
 	}
+
 	sourceModTime := info.ModTime()
 
 	// 缓存 key 使用相对于 baseDir 的路径
@@ -303,7 +304,20 @@ func GetGoScripts(c *gin.Context) {
 	} else {
 		relPath = filepath.ToSlash(relPath)
 	}
+	relSrc := filepath.ToSlash(relPath)
+	if config.Cfg.IS_DEBUG {
 
+		if _, err := os.Stat(qjscPath); os.IsNotExist(err) {
+			content, err := os.ReadFile(filepath.Join(baseDir, relSrc))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "读取脚本内容失败"})
+				return
+			}
+			fmt.Println("content from javascript:")
+			c.Data(http.StatusOK, "application/javascript", content)
+			return
+		}
+	}
 	if v, ok := goScriptCache.Load(relPath); ok {
 		entry := v.(*goScriptCacheEntry)
 		// 源文件的更新时间小于等于缓存编译时间则直接返回缓存（缓存的是字节码二进制）
@@ -316,8 +330,6 @@ func GetGoScripts(c *gin.Context) {
 	// 输出 .c 路径：同目录下同名 .c（相对 baseDir）
 	relOut := filepath.ToSlash(filepath.Join(filepath.Dir(relPath), filepath.Base(cleanPath[:len(cleanPath)-3])+".c"))
 	absOut := filepath.Join(baseDir, relOut)
-
-	relSrc := filepath.ToSlash(relPath)
 
 	cmd := exec.Command(qjscPath, "-o", relOut, "-m", "-s", "-c", relSrc)
 
