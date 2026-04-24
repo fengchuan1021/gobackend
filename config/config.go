@@ -18,6 +18,7 @@ type Config struct {
 	Server       ServerConfig
 	BASE_DIR     string
 	SOLUTION_DIR string
+	IS_DEBUG     bool
 }
 
 type MySQLConfig struct {
@@ -42,7 +43,9 @@ type ServerConfig struct {
 
 func Load(env string) error {
 	envFile := "dev.env"
+	var IS_DEBUG bool = true
 	if env == "product" || env == "prod" {
+		IS_DEBUG = false
 		envFile = "product.env"
 	}
 
@@ -61,6 +64,7 @@ func Load(env string) error {
 	baseDir := filepath.Dir(filepath.Dir(filePath))
 
 	Cfg = &Config{
+		IS_DEBUG:     IS_DEBUG,
 		BASE_DIR:     baseDir,
 		SOLUTION_DIR: filepath.Dir(baseDir),
 		MySQL: MySQLConfig{
