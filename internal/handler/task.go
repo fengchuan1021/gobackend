@@ -102,7 +102,7 @@ func ClientAddTask(c *gin.Context) {
 	}
 	var req ClientAddTaskReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task_id is required"})
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "输入不正确"})
 		return
 	}
 	// argsBytes, err := json.Marshal(req.Params)
@@ -113,12 +113,24 @@ func ClientAddTask(c *gin.Context) {
 	//argsStr := string(argsBytes)
 	argsStr := ""
 	if len(req.Serials) <= 0 {
-		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serials is required"})
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "序列号未填"})
 	}
 	if req.Rounds == 0 {
 		req.Rounds = 1
 	}
-	database.DB.Where("device_serial in (?)", req.Serials).Delete(&model.Task{})
+	database.DB.Where("device_serial in (?) and status = ?", req.Serials, model.TaskStatusNotStarted).Delete(&model.Task{})
+	now := time.Now()
+	database.DB.Model(&model.Task{}).
+		Where("device_serial IN ?", req.Serials).
+		Where("status = ?", model.TaskStatusRunning).
+		Updates(map[string]interface{}{
+			"status":   model.TaskStatusAbnormalEnd,
+			"end_time": &now,
+		})
+	database.DB.Model(&model.Task{}).
+		Where("device_serial IN ?", req.Serials).
+		Where("status IN ?", []int{model.TaskStatusOnHold}).
+		Update("status", model.TaskStatusAbnormalEnd)
 	added := false
 
 	for _, serial := range req.Serials {
@@ -162,6 +174,8 @@ func ClientAddTask(c *gin.Context) {
 			if len(req.Serials) == 1 {
 				go udpserver.SendCommand(serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(task.ID))), device.UserID)
 
+			} else {
+				go udpserver.SendCommand(serial, udpserver.CmdStopTask, []byte(""), 0)
 			}
 		}
 	}
@@ -224,17 +238,32 @@ func ClientFinishTask(c *gin.Context) {
 	task.LeftRound--
 	if req.Status == model.TaskStatusCompleted {
 		if task.LeftRound > 0 {
-
-			task.EndTime = &now
-			task.Status = model.TaskStatusRoundEnd
-			database.DB.Save(&task)
-			//go udpserver.SendCommand(req.Serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(task.ID))))
-		} else if task.LeftRound == 0 {
-			task.EndTime = &now
-			task.Status = model.TaskStatusCompleted
-			database.DB.Save(&task)
+			clone := model.Task{
+				UserID:       task.UserID,
+				DeviceID:     task.DeviceID,
+				DeviceSerial: task.DeviceSerial,
+				ScriptID:     task.ScriptID,
+				Args:         task.Args,
+				StartTime:    nil,
+				EndTime:      nil,
+				TotalMinutes: task.TotalMinutes,
+				TotalRound:   task.TotalRound,
+				LeftRound:    task.LeftRound,
+				LeftMinute:   task.TotalMinutes,
+				Status:       model.TaskStatusNotStarted,
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
+			database.DB.Create(&clone)
 		}
+
+		task.EndTime = &now
+		task.Status = model.TaskStatusCompleted
+		task.LeftRound = 0
+		database.DB.Save(&task)
+
 	}
+
 	if req.Status == model.TaskStatusAbnormalEnd {
 		task.EndTime = &now
 		task.LeftRound = 0
