@@ -87,21 +87,25 @@ type ClientAddTaskReq struct {
 func ClientAddTask(c *gin.Context) {
 	userID, exists := c.Get(middleware.UserIDKey)
 	if !exists {
+		fmt.Println("user not found")
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
 		return
 	}
 	uid := userID.(uint)
 	var user model.User
 	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
+		fmt.Println("user not found2")
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
 		return
 	}
 	if user.IsActive == false {
+		fmt.Println("user not active")
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户未激活"})
 		return
 	}
 	var req ClientAddTaskReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("input not correct")
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "输入不正确"})
 		return
 	}
