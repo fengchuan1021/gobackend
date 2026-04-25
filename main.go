@@ -9,7 +9,6 @@ import (
 	"gobackend/internal/handler"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
-	"gobackend/internal/model/third"
 	"gobackend/internal/udpserver"
 	"gobackend/internal/websocket"
 
@@ -43,10 +42,9 @@ func main() {
 		&model.Log{},
 		&model.TrickStoreConfig{},
 		&model.UserActivateLog{},
-		&third.QuNaTask{},
-		&third.QuNaTaskSummary{},
 		&model.Backup{},
 		&model.Blacklist{},
+		&model.DeviceGroup{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -69,6 +67,7 @@ func main() {
 	go wsHub.Run()
 	r.GET("/ws", websocket.Handle(wsHub))
 	api := r.Group("/api")
+
 	{
 		api.POST("/applications/getEssentialApps", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetEssentialApps)
 		api.POST("/backup/backupApps", middleware.Auth, handler.BackupApps)
@@ -84,7 +83,6 @@ func main() {
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
 		api.GET("/ws", websocket.Handle(wsHub))
 		api.GET("/scripts_tree", handler.GetScriptsTree)
-		api.POST("/file/uploadFile", handler.UploadFile)
 		api.GET("/scripts", middleware.Auth, handler.ListScripts)
 		api.GET("/scripts/:id", middleware.Auth, handler.GetScript)
 		api.POST("/scripts", middleware.Auth, handler.CreateScript)
@@ -119,6 +117,11 @@ func main() {
 		api.GET("/applications", middleware.Auth, handler.ListApplications)
 		api.POST("/applications", middleware.Auth, handler.SaveApplications)
 		api.GET("/devices", middleware.Auth, handler.SearchDevices)
+		api.POST("/devices/getDevicesTree", middleware.Auth, handler.GetDevicesTree)
+		api.POST("/devices/groups", middleware.Auth, handler.CreateDeviceGroup)
+		api.DELETE("/devices/groups/:id", middleware.Auth, handler.DeleteDeviceGroup)
+		api.POST("/devices/sort_numbers", middleware.Auth, handler.UpdateDeviceSortNumbers)
+		api.PATCH("/devices/meta/:id", middleware.Auth, handler.UpdateDeviceMeta)
 		api.PATCH("/devices/add_device_expire_time/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
@@ -134,15 +137,9 @@ func main() {
 			dev.GET("/getXmlLayout", handler.GetXmlLayout)
 			dev.POST("/runDevScript", handler.RunDevScript)
 		}
-		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
-		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
-		api.POST("/third/uploadQuNaTask", middleware.Auth, handler.UploadQuNaTask)
-		api.POST("/third/getQuNaTaskSummaryList", middleware.Auth, handler.GetQuNaTaskSummaryList)
-
 	}
 
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
-	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
 
 	go udpserver.Run(config.Cfg.Server.UDPPort)
 
