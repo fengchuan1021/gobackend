@@ -44,6 +44,7 @@ func main() {
 		&model.UserActivateLog{},
 		&model.Backup{},
 		&model.Blacklist{},
+		&model.DeviceGroup{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -116,6 +117,11 @@ func main() {
 		api.GET("/applications", middleware.Auth, handler.ListApplications)
 		api.POST("/applications", middleware.Auth, handler.SaveApplications)
 		api.GET("/devices", middleware.Auth, handler.SearchDevices)
+		api.POST("/devices/getDevicesTree", middleware.Auth, handler.GetDevicesTree)
+		api.POST("/devices/groups", middleware.Auth, handler.CreateDeviceGroup)
+		api.DELETE("/devices/groups/:id", middleware.Auth, handler.DeleteDeviceGroup)
+		api.POST("/devices/sort_numbers", middleware.Auth, handler.UpdateDeviceSortNumbers)
+		api.PATCH("/devices/meta/:id", middleware.Auth, handler.UpdateDeviceMeta)
 		api.PATCH("/devices/add_device_expire_time/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)

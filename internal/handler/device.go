@@ -419,3 +419,222 @@ func ResetDeviceBySerial(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"msg": "重置成功"})
 }
+
+func GetDevicesTree(c *gin.Context) {
+	userIDRaw, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	uid := userIDRaw.(uint)
+
+	var deviceGroups []model.DeviceGroup
+	err := database.DB.Where("user_id = ?", uid).Order("id ASC").Find(&deviceGroups).Error
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询分组失败"})
+		return
+	}
+
+	type deviceGroupNode struct {
+		ID        uint           `json:"id"`
+		GroupName string         `json:"group_name"`
+		Devices   []model.Device `json:"devices"`
+	}
+
+	result := make([]deviceGroupNode, 0, len(deviceGroups)+1)
+
+	// 1) 用户创建的分组及其设备
+	for _, group := range deviceGroups {
+		var devices []model.Device
+		if err := database.DB.
+			Where("user_id = ? AND group_id = ?", uid, group.ID).
+			Order("sort_number ASC, id ASC").
+			Find(&devices).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询分组设备失败"})
+			return
+		}
+		result = append(result, deviceGroupNode{
+			ID:        group.ID,
+			GroupName: group.GroupName,
+			Devices:   devices,
+		})
+	}
+
+	// 2) 默认分组（group_id = 0）的设备
+	var defaultDevices []model.Device
+	if err := database.DB.
+		Where("user_id = ? AND group_id = ?", uid, 0).
+		Order("sort_number ASC, id ASC").
+		Find(&defaultDevices).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询默认分组设备失败"})
+		return
+	}
+	result = append(result, deviceGroupNode{
+		ID:        0,
+		GroupName: "默认分组",
+		Devices:   defaultDevices,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+
+}
+
+func CreateDeviceGroup(c *gin.Context) {
+	userIDRaw, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	uid := userIDRaw.(uint)
+	var req struct {
+		GroupName string `json:"group_name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	name := strings.TrimSpace(req.GroupName)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "分组名称不能为空"})
+		return
+	}
+	var existsGroup model.DeviceGroup
+	if err := database.DB.Where("user_id = ? AND group_name = ?", uid, name).First(&existsGroup).Error; err == nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "分组已存在"})
+		return
+	}
+	group := model.DeviceGroup{
+		GroupName: name,
+		UserID:    uid,
+	}
+	if err := database.DB.Create(&group).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "创建分组失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "创建分组成功", "data": group})
+}
+
+func DeleteDeviceGroup(c *gin.Context) {
+	userIDRaw, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	uid := userIDRaw.(uint)
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "缺少分组ID"})
+		return
+	}
+	var group model.DeviceGroup
+	if err := database.DB.Where("id = ? AND user_id = ?", id, uid).First(&group).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "分组不存在"})
+		return
+	}
+	tx := database.DB.Begin()
+	if err := tx.Model(&model.Device{}).
+		Where("user_id = ? AND group_id = ?", uid, group.ID).
+		Update("group_id", 0).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "设备回收至默认分组失败"})
+		return
+	}
+	if err := tx.Delete(&group).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "删除分组失败"})
+		return
+	}
+	tx.Commit()
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "删除分组成功"})
+}
+
+func UpdateDeviceSortNumbers(c *gin.Context) {
+	userIDRaw, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	uid := userIDRaw.(uint)
+	var req struct {
+		GroupID   uint   `json:"group_id"`
+		DeviceIDs []uint `json:"device_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	if len(req.DeviceIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "device_ids 不能为空"})
+		return
+	}
+	tx := database.DB.Begin()
+	for idx, id := range req.DeviceIDs {
+		if err := tx.Model(&model.Device{}).
+			Where("id = ? AND user_id = ? AND group_id = ?", id, uid, req.GroupID).
+			Update("sort_number", idx+1).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "更新排序失败"})
+			return
+		}
+	}
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "提交排序失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "排序已保存"})
+}
+
+func UpdateDeviceMeta(c *gin.Context) {
+	userIDRaw, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	uid := userIDRaw.(uint)
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	var req struct {
+		GroupID       *uint   `json:"group_id"`
+		ProfileSerial *string `json:"profile_serial"`
+		Note          *string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	var device model.Device
+	if err := database.DB.Where("id = ? AND user_id = ?", id, uid).First(&device).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "设备不存在"})
+		return
+	}
+	updates := map[string]interface{}{}
+	if req.GroupID != nil {
+		targetGroupID := *req.GroupID
+		if targetGroupID > 0 {
+			var group model.DeviceGroup
+			if err := database.DB.Where("id = ? AND user_id = ?", targetGroupID, uid).First(&group).Error; err != nil {
+				c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "目标分组不存在"})
+				return
+			}
+		}
+		updates["group_id"] = targetGroupID
+	}
+	if req.ProfileSerial != nil {
+		updates["profile_serial"] = strings.TrimSpace(*req.ProfileSerial)
+	}
+	if req.Note != nil {
+		updates["note"] = strings.TrimSpace(*req.Note)
+	}
+	if len(updates) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "未提供可更新字段"})
+		return
+	}
+	if err := database.DB.Model(&device).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "更新设备失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "更新成功"})
+}
