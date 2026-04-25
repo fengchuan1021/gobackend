@@ -66,6 +66,7 @@ func main() {
 	go wsHub.Run()
 	r.GET("/ws", websocket.Handle(wsHub))
 	api := r.Group("/api")
+
 	{
 		api.POST("/applications/getEssentialApps", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetEssentialApps)
 		api.POST("/backup/backupApps", middleware.Auth, handler.BackupApps)

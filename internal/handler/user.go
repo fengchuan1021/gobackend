@@ -70,7 +70,13 @@ func Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "注册失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "注册成功"})
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "注册成功",
+		"data": gin.H{
+			"username": user.Username,
+		},
+	})
 
 }
 
@@ -100,7 +106,11 @@ func Login(c *gin.Context) {
 
 	token := genToken(user.ID, user.RoleID)
 	profile := toProfile(&user)
-	c.JSON(http.StatusOK, gin.H{"data": LoginResp{Token: token, User: profile}})
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "登录成功",
+		"data": LoginResp{Token: token, User: profile},
+	})
 }
 
 // LoginWithSerial 登录
@@ -126,7 +136,7 @@ func LoginWithSerial(c *gin.Context) {
 
 	token := genToken(device.UserID, device.User.RoleID)
 	profile := toProfile(&device.User)
-	c.JSON(http.StatusOK, gin.H{"data": LoginResp{Token: token, User: profile}})
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "登录成功", "data": LoginResp{Token: token, User: profile}})
 }
 
 // CreateUserReq 添加用户请求
