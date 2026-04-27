@@ -178,10 +178,11 @@ func SearchDevices(c *gin.Context) {
 type UpdateDeviceReq struct {
 	//Username string  `json:"username"`
 	//ExpireAt *string `json:"expire_at"` // ISO8601 如 2025-12-31，null 表示清除到期时间
-	// AddDuration 按“月数”增加到期时间。
+	// AddDuration 按“月/天”增加到期时间。
 	// 如果设备原本的 ExpireAt <= 当前时间或为空，则从当前时间开始增加；
 	// 否则从原 ExpireAt 开始增加。
-	AddDuration *int `json:"add_duration"`
+	AddDuration     *int    `json:"add_duration"`
+	AddDurationType *string `json:"add_duration_type"`
 }
 
 // add_device_expire_time 更新设备（增加到期时间）
@@ -222,12 +223,29 @@ func UpdateDevice(c *gin.Context) {
 	}
 	updates := make(map[string]interface{})
 	var newExpireAt *time.Time
-	var months int
-
+	var duration int
+	durationType := "month"
+	roleID, exists := c.Get(middleware.RoleIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
+		return
+	}
+	roleIDValue := roleID.(uint)
+	if roleIDValue == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "无权限"})
+		return
+	}
 	if req.AddDuration != nil {
-		months = *req.AddDuration
-		if months <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"msg": "add_duration 必须是正数（单位：月）"})
+		duration = *req.AddDuration
+		if duration <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"msg": "add_duration 必须是正数"})
+			return
+		}
+		if req.AddDurationType != nil {
+			durationType = strings.TrimSpace(strings.ToLower(*req.AddDurationType))
+		}
+		if durationType != "month" && durationType != "day" {
+			c.JSON(http.StatusBadRequest, gin.H{"msg": "add_duration_type 仅支持 month/day"})
 			return
 		}
 
@@ -238,7 +256,12 @@ func UpdateDevice(c *gin.Context) {
 			base = *device.ExpireAt
 		}
 
-		t := base.AddDate(0, months, 0)
+		var t time.Time
+		if durationType == "day" {
+			t = base.AddDate(0, 0, duration)
+		} else {
+			t = base.AddDate(0, duration, 0)
+		}
 		updates["expire_at"] = &t
 		newExpireAt = &t
 	} else {
@@ -252,17 +275,21 @@ func UpdateDevice(c *gin.Context) {
 			return
 		}
 
-		// 写入操作日志（记录增到期的月数与新到期时间）
+		// 写入操作日志（记录增到期时长与新到期时间）
 		var user model.User
 		if err := database.DB.First(&user, uid).Error; err == nil {
+			unit := "个月"
+			if durationType == "day" {
+				unit = "天"
+			}
 			log := model.Log{
 				UserID:       uid,
 				Username:     user.Username,
 				LogType:      "device_expire_add",
-				Remark:       fmt.Sprintf("增加设备到期时间：%d 个月", months),
+				Remark:       fmt.Sprintf("增加设备到期时间：%d %s", duration, unit),
 				DeviceSerial: device.Serial,
 				DeviceID:     device.ID,
-				AddDuration:  months,
+				AddDuration:  duration,
 				NewExpireAt:  newExpireAt,
 			}
 			_ = database.DB.Create(&log).Error

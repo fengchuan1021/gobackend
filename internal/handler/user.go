@@ -248,6 +248,16 @@ func ActivateUser(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
 		return
 	}
+	roleID, exists := c.Get(middleware.RoleIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
+		return
+	}
+	roleIDValue := roleID.(uint)
+	if roleIDValue != 1 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "无权限"})
+		return
+	}
 
 	// 用事务同时更新用户和写入激活日志
 	tx := database.DB.Begin()
