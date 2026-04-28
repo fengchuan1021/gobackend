@@ -42,6 +42,7 @@ type SaveApplicationsReq struct {
 type EssentialAppLite struct {
 	PackageName string `json:"package_name"`
 	DownloadUrl string `json:"download_url"`
+	ApkVersion  string `json:"apk_version"`
 }
 
 // ListApplications 获取应用列表（管理端合并已保存的配置用）
@@ -206,6 +207,7 @@ func GetEssentialApps(c *gin.Context) {
 		out = append(out, EssentialAppLite{
 			PackageName: a.PackageName,
 			DownloadUrl: a.DownloadUrl,
+			ApkVersion:  a.ApkVersion,
 		})
 	}
 
