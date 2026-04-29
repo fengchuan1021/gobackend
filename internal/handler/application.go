@@ -213,3 +213,24 @@ func GetEssentialApps(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "data": out})
 }
+func InstallRandomApp(c *gin.Context) {
+	var app model.RandomLitteApk
+	err := database.DB.Order("RAND()").Limit(1).First(&app).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "暂无数据", "data": gin.H{}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "查询失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "获取成功",
+		"data": gin.H{
+			"package_name": app.PackageName,
+			"download_url": app.DownloadURL,
+		},
+	})
+}
