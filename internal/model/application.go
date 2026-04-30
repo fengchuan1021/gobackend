@@ -14,6 +14,7 @@ type Application struct {
 	BackupData  bool      `gorm:"default:false" json:"backup_data"`
 	IsEssential bool      `gorm:"default:false;index" json:"is_essential"`
 	DownloadUrl string    `gorm:"type:varchar(512)" json:"download_url"`
+	ApkVersion  string    `gorm:"type:varchar(32);default:''" json:"apk_version"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

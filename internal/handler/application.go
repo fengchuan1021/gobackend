@@ -42,6 +42,7 @@ type SaveApplicationsReq struct {
 type EssentialAppLite struct {
 	PackageName string `json:"package_name"`
 	DownloadUrl string `json:"download_url"`
+	ApkVersion  string `json:"apk_version"`
 }
 
 // ListApplications 获取应用列表（管理端合并已保存的配置用）
@@ -206,8 +207,30 @@ func GetEssentialApps(c *gin.Context) {
 		out = append(out, EssentialAppLite{
 			PackageName: a.PackageName,
 			DownloadUrl: a.DownloadUrl,
+			ApkVersion:  a.ApkVersion,
 		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "data": out})
+}
+func InstallRandomApp(c *gin.Context) {
+	var app model.RandomLitteApk
+	err := database.DB.Order("RAND()").Limit(1).First(&app).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "暂无数据", "data": gin.H{}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "查询失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"msg":  "获取成功",
+		"data": gin.H{
+			"package_name": app.PackageName,
+			"download_url": app.DownloadURL,
+		},
+	})
 }

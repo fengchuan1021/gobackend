@@ -72,14 +72,15 @@ func extractBytecodeFromC(cSource []byte) ([]byte, error) {
 
 // ScriptListItem 脚本列表项（不含 content）
 type ScriptListItem struct {
-	ID           uint   `json:"id"`
-	Name         string `json:"name"`
-	IconURL      string `json:"icon_url"`
-	CategoryID   uint   `json:"category_id"`
-	Description  string `json:"description"`
-	PackageName  string `json:"package_name"`
-	IsInMiMarket bool   `json:"is_in_mi_market"`
-	IsInNetdisk  bool   `json:"is_in_netdisk"`
+	ID               uint   `json:"id"`
+	Name             string `json:"name"`
+	IconURL          string `json:"icon_url"`
+	CategoryID       uint   `json:"category_id"`
+	Description      string `json:"description"`
+	PackageName      string `json:"package_name"`
+	IsInMiMarket     bool   `json:"is_in_mi_market"`
+	IsInNetdisk      bool   `json:"is_in_netdisk"`
+	IsVirtualPackage bool   `json:"is_virtual_package"`
 }
 
 // CategoryWithScripts 分类及其脚本树节点
@@ -91,7 +92,7 @@ type CategoryWithScripts struct {
 // GetScriptsTree 返回所有分类及其下的脚本（不含脚本内容）
 func GetScriptsTree(c *gin.Context) {
 	var categories []model.ScriptCategory
-	err := database.DB.Order("sort_order ASC").Find(&categories).Error
+	err := database.DB.Order("sort_order desc").Find(&categories).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
@@ -113,14 +114,15 @@ func GetScriptsTree(c *gin.Context) {
 		items := make([]ScriptListItem, 0, len(scripts))
 		for _, s := range scripts {
 			items = append(items, ScriptListItem{
-				ID:           s.ID,
-				Name:         s.Name,
-				IconURL:      s.IconURL,
-				CategoryID:   s.CategoryID,
-				PackageName:  s.PackageName,
-				Description:  s.Description,
-				IsInMiMarket: s.IsInMiMarket,
-				IsInNetdisk:  s.IsInNetdisk,
+				ID:               s.ID,
+				Name:             s.Name,
+				IconURL:          s.IconURL,
+				CategoryID:       s.CategoryID,
+				PackageName:      s.PackageName,
+				Description:      s.Description,
+				IsInMiMarket:     s.IsInMiMarket,
+				IsInNetdisk:      s.IsInNetdisk,
+				IsVirtualPackage: s.IsVirtualPackage,
 			})
 		}
 
@@ -362,14 +364,15 @@ func GetGoScripts(c *gin.Context) {
 
 // UpdateScriptReq 更新脚本请求（字段均可选）
 type UpdateScriptReq struct {
-	Name         *string `json:"name"`
-	Description  *string `json:"description"`
-	CategoryID   *uint   `json:"category_id"`
-	FilePath     *string `json:"file_path"`
-	PackageName  *string `json:"package_name"`
-	IconURL      *string `json:"icon_url"`
-	IsInMiMarket *bool   `json:"is_in_mi_market"`
-	IsInNetdisk  *bool   `json:"is_in_netdisk"`
+	Name             *string `json:"name"`
+	Description      *string `json:"description"`
+	CategoryID       *uint   `json:"category_id"`
+	FilePath         *string `json:"file_path"`
+	PackageName      *string `json:"package_name"`
+	IconURL          *string `json:"icon_url"`
+	IsInMiMarket     *bool   `json:"is_in_mi_market"`
+	IsInNetdisk      *bool   `json:"is_in_netdisk"`
+	IsVirtualPackage *bool   `json:"is_virtual_package"`
 }
 
 // UpdateScript 更新脚本
@@ -412,6 +415,9 @@ func UpdateScript(c *gin.Context) {
 	}
 	if req.IsInNetdisk != nil {
 		s.IsInNetdisk = *req.IsInNetdisk
+	}
+	if req.IsVirtualPackage != nil {
+		s.IsVirtualPackage = *req.IsVirtualPackage
 	}
 	if err := database.DB.Save(&s).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
