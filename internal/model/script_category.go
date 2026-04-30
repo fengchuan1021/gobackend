@@ -13,6 +13,7 @@ type ScriptCategory struct {
 	IsHot       bool      `gorm:"default:false" json:"is_hot"`
 	Description string    `gorm:"type:text" json:"description"`
 	SortOrder   int       `gorm:"index;default:0" json:"sort_order"`
+	AppPerDay   int       `gorm:"default:0" json:"app_per_day"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 
