@@ -117,6 +117,7 @@ func main() {
 		api.POST("/user/activate", middleware.Auth, handler.ActivateUser)
 		api.GET("/applications", middleware.Auth, handler.ListApplications)
 		api.POST("/applications/installRandomApp", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.InstallRandomApp)
+		api.POST("/tagdevice/getdevcietagkeywords", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetDeviceTagKeywords)
 		api.POST("/applications", middleware.Auth, handler.SaveApplications)
 		api.GET("/devices", middleware.Auth, handler.SearchDevices)
 		api.POST("/devices/getDevicesTree", middleware.Auth, handler.GetDevicesTree)
