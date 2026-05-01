@@ -230,11 +230,13 @@ type ClientFinishTaskReq struct {
 func ClientFinishTask(c *gin.Context) {
 	var req ClientFinishTaskReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("input not correct", err)
 		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "task_id is required"})
 		return
 	}
 	var task model.Task
 	if err := database.DB.Where("id = ?", req.TaskID).First(&task).Error; err != nil {
+		fmt.Println("task not found", err)
 		c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "task not found"})
 		return
 	}
@@ -272,6 +274,13 @@ func ClientFinishTask(c *gin.Context) {
 		task.EndTime = &now
 		task.LeftRound = 0
 		task.Status = model.TaskStatusAbnormalEnd
+		database.DB.Save(&task)
+	}
+
+	if req.Status == model.TaskStatusAccountBan {
+		task.EndTime = &now
+		task.LeftRound = 0
+		task.Status = model.TaskStatusAccountBan
 		database.DB.Save(&task)
 	}
 	// var newTask model.Task
