@@ -9,7 +9,7 @@ const (
 	TaskStatusNotStarted  = 0 // 未开始
 	TaskStatusRunning     = 1 // 执行中
 	TaskStatusCompleted   = 2 // 正常结束
-	TaskStatusRoundEnd    = 3 // 轮次结束 已废弃
+	TaskStatusAccountBan  = 3 // 账号被ban
 	TaskStatusAbnormalEnd = 4 // 异常结束
 	TaskStatusTimeout     = 5 // 超时结束
 	TaskStatusOnHold      = 6 // 挂起
