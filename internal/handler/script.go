@@ -103,7 +103,7 @@ func GetScriptsTree(c *gin.Context) {
 		var scripts []model.Script
 		// 排除 content 字段，不加载到内存
 		err := database.DB.Model(&model.Script{}).
-			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market", "is_in_netdisk").
+			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market", "is_in_netdisk", "is_virtual_package").
 			Where("category_id = ?", cat.ID).
 			Find(&scripts).Error
 		if err != nil {
