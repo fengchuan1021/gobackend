@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"time"
 
@@ -123,19 +124,13 @@ func ClientAddTask(c *gin.Context) {
 	if req.Rounds == 0 {
 		req.Rounds = 1
 	}
-	database.DB.Where("device_serial in (?) and status = ?", req.Serials, model.TaskStatusNotStarted).Delete(&model.Task{})
 	now := time.Now()
 	database.DB.Model(&model.Task{}).
-		Where("device_serial IN ?", req.Serials).
-		Where("status = ?", model.TaskStatusRunning).
+		Where("device_serial in (?) and (status = ? or status = ? or status = ?)", req.Serials, model.TaskStatusNotStarted, model.TaskStatusRunning, model.TaskStatusOnHold).
 		Updates(map[string]interface{}{
 			"status":   model.TaskStatusAbnormalEnd,
 			"end_time": &now,
 		})
-	database.DB.Model(&model.Task{}).
-		Where("device_serial IN ?", req.Serials).
-		Where("status IN ?", []int{model.TaskStatusOnHold}).
-		Update("status", model.TaskStatusAbnormalEnd)
 	added := false
 
 	for _, serial := range req.Serials {
@@ -295,4 +290,162 @@ func ClientFinishTask(c *gin.Context) {
 	// }
 	// go udpserver.SendCommand(req.Serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), newTask.UserID)
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
+}
+
+// TaskExecutionStatsReq 批量任务执行统计（仅正常结束）
+type TaskExecutionStatsReq struct {
+	DeviceSerial string `json:"device_serial" binding:"required"`
+	ScriptIDs    []uint `json:"script_ids"`
+}
+
+// completedTaskDurationMinutes 单次正常结束任务的执行时长（分钟）。
+// end 不早于 start 时直接取时间差；若 end 早于 start 则视为跨自然日：start 到 start 当日 24:00 + end 当日 0:00 到 end。
+func completedTaskDurationMinutes(start, end time.Time, loc *time.Location) int {
+	if !end.Before(start) {
+		return int(end.Sub(start).Minutes())
+	}
+	startL := start.In(loc)
+	endL := end.In(loc)
+	startDay := time.Date(startL.Year(), startL.Month(), startL.Day(), 0, 0, 0, 0, loc)
+	nextMidnight := startDay.AddDate(0, 0, 1)
+	part1 := nextMidnight.Sub(startL)
+	endDayStart := time.Date(endL.Year(), endL.Month(), endL.Day(), 0, 0, 0, 0, loc)
+	part2 := endL.Sub(endDayStart)
+	m := int((part1 + part2).Minutes())
+	if m < 0 {
+		return 0
+	}
+	return m
+}
+
+// computeExecutionStatsPayload 将同一 script 下的已完成任务聚合成 last_7_days / today_durations（按开始日归属）
+func computeExecutionStatsPayload(tasks []model.Task, loc *time.Location, todayStart time.Time, todayKey string) gin.H {
+	dayTotals := make(map[string]int)
+	type runRec struct {
+		start time.Time
+		min   int
+	}
+	var todayRuns []runRec
+
+	for _, t := range tasks {
+		if t.EndTime == nil || t.StartTime == nil {
+			continue
+		}
+		mins := completedTaskDurationMinutes(*t.StartTime, *t.EndTime, loc)
+		if mins < 0 {
+			mins = 0
+		}
+		startLocal := t.StartTime.In(loc)
+		key := time.Date(startLocal.Year(), startLocal.Month(), startLocal.Day(), 0, 0, 0, 0, loc).Format("2006-01-02")
+		dayTotals[key] += mins
+		if key == todayKey {
+			todayRuns = append(todayRuns, runRec{start: *t.StartTime, min: mins})
+		}
+	}
+	sort.Slice(todayRuns, func(i, j int) bool {
+		return todayRuns[i].start.Before(todayRuns[j].start)
+	})
+	todayDurations := make([]int, 0, len(todayRuns))
+	for _, r := range todayRuns {
+		todayDurations = append(todayDurations, r.min)
+	}
+	last7 := make([]gin.H, 0, 7)
+	for i := 0; i < 7; i++ {
+		d := todayStart.AddDate(0, 0, -7+i)
+		key := d.Format("2006-01-02")
+		total := dayTotals[key]
+		last7 = append(last7, gin.H{
+			"total_minutes": total,
+			"executed":      total > 0,
+		})
+	}
+	return gin.H{
+		"last_7_days":     last7,
+		"today_durations": todayDurations,
+	}
+}
+
+// GetTaskExecutionStats 批量：device_serial + script_ids，一次查询统计多个脚本（仅 status=正常结束）
+func GetTaskExecutionStats(c *gin.Context) {
+	userID, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	uid := userID.(uint)
+	var req TaskExecutionStatsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "device_serial 必填"})
+		return
+	}
+	serial := req.DeviceSerial
+	if serial == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "device_serial 无效"})
+		return
+	}
+	var device model.Device
+	if err := database.DB.Where("serial = ? AND user_id = ?", serial, uid).First(&device).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "设备不存在或无权限"})
+		return
+	}
+	seen := make(map[uint]struct{})
+	var scriptIDs []uint
+	for _, id := range req.ScriptIDs {
+		if id == 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		scriptIDs = append(scriptIDs, id)
+	}
+
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.UTC
+	}
+	now := time.Now().In(loc)
+	todayStart := time.Date(
+		now.Year(), now.Month(), now.Day(),
+		0, 0, 0, 0, loc,
+	)
+	todayKey := todayStart.Format("2006-01-02")
+	cutoff := todayStart.AddDate(0, 0, -7)
+
+	statsOut := gin.H{}
+	if len(scriptIDs) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"code": 200,
+			"msg":  "ok",
+			"data": gin.H{"stats": statsOut},
+		})
+		return
+	}
+
+	var tasks []model.Task
+	if err := database.DB.Where(
+		"device_serial = ? AND status = ? AND start_time >= ? AND end_time IS NOT NULL AND start_time IS NOT NULL AND script_id IN ?",
+		serial, model.TaskStatusCompleted, cutoff, scriptIDs,
+	).Find(&tasks).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询失败"})
+		return
+	}
+
+	byScript := make(map[uint][]model.Task)
+	for _, t := range tasks {
+		byScript[t.ScriptID] = append(byScript[t.ScriptID], t)
+	}
+	for _, id := range scriptIDs {
+		list := byScript[id]
+		statsOut[strconv.FormatUint(uint64(id), 10)] = computeExecutionStatsPayload(list, loc, todayStart, todayKey)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "ok",
+		"data": gin.H{
+			"stats": statsOut,
+		},
+	})
 }

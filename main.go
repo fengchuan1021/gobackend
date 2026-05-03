@@ -130,6 +130,7 @@ func main() {
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
 		api.POST("/task/clientStopTask", middleware.Auth, handler.ClientStopTask)
 		api.POST("/task/clientFinishTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientFinishTask)
+		api.POST("/task/executionStats", middleware.Auth, handler.GetTaskExecutionStats)
 		api.POST("/udp/cmdcallback", handler.CmdCallback)
 		// 设备凭 script_id 拉取脚本内容，无鉴权（script_id 不可猜测且 20s 过期）
 		api.POST("/dev/getDevScriptContent/:id", handler.GetDevScriptContent)
