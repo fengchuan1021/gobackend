@@ -72,6 +72,7 @@ func GetTaskDetail(c *gin.Context) {
 			"total_minutes":   task.TotalMinutes,
 			"package_name":    task.Script.PackageName,
 			"commonjsversion": commonjs_version,
+			"scriptid":        fmt.Sprintf("%v", task.ScriptID),
 		},
 	})
 }
