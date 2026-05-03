@@ -149,10 +149,11 @@ var (
 )
 
 type heartbeatJob struct {
-	uid     uint
-	serial  string
-	hasTask uint32
-	from    *net.UDPAddr
+	uid      uint
+	serial   string
+	hasTask  uint32
+	scriptID uint
+	from     *net.UDPAddr
 }
 
 func parsePacket(buf []byte) (magic uint32, length uint32, cmdType uint32, messageID uint32, payload []byte, ok bool) {
@@ -405,21 +406,27 @@ func Run(port int) {
 		switch cmdType {
 		case CmdHeartbeat:
 			serialAndUid := string(append([]byte(nil), payload...))
-			serialAndUidSplit := strings.Split(serialAndUid, ",")
+			serialAndUidAndScriptIdSplit := strings.Split(serialAndUid, ",")
 
-			if len(serialAndUidSplit) != 2 {
+			if len(serialAndUidAndScriptIdSplit) < 2 {
 				continue
 			}
-			serial := serialAndUidSplit[0]
-			uid, err := strconv.ParseUint(serialAndUidSplit[1], 10, 32)
+			serial := serialAndUidAndScriptIdSplit[0]
+			uid, err := strconv.ParseUint(serialAndUidAndScriptIdSplit[1], 10, 32)
+			var scriptID uint64 = 0
+			if len(serialAndUidAndScriptIdSplit) == 3 {
+				scriptID, err = strconv.ParseUint(serialAndUidAndScriptIdSplit[2], 10, 32)
+			}
+
 			if err != nil {
 				continue
 			}
 			job := heartbeatJob{
-				uid:     uint(uid),
-				serial:  serial,
-				hasTask: msgID,
-				from:    cloneUDPAddr(from),
+				uid:      uint(uid),
+				serial:   serial,
+				hasTask:  msgID,
+				scriptID: uint(scriptID),
+				from:     cloneUDPAddr(from),
 			}
 			heartbeatCh <- job
 		case CmdAck:
