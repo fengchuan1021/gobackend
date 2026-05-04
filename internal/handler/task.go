@@ -207,10 +207,14 @@ func ClientStopTask(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serials is empty"})
 		return
 	}
-	if err := database.DB.Where("device_serial in (?) and status=1", req.Serials).Delete(&model.Task{}).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "delete task failed"})
-		return
-	}
+	now := time.Now()
+	database.DB.Model(&model.Task{}).
+		Where("device_serial in (?) and (status = ? or status = ? or status = ?)", req.Serials, model.TaskStatusNotStarted, model.TaskStatusRunning, model.TaskStatusOnHold).
+		Updates(map[string]interface{}{
+			"status":   model.TaskStatusAbnormalEnd,
+			"end_time": &now,
+		})
+
 	for _, serial := range req.Serials {
 		go udpserver.SendCommand(serial, udpserver.CmdStopTask, []byte(""), 0)
 	}
@@ -331,6 +335,10 @@ func computeExecutionStatsPayload(tasks []model.Task, loc *time.Location, todayS
 		if t.EndTime == nil || t.StartTime == nil {
 			continue
 		}
+		// 如果 StartTime 和 EndTime 的时间差小于 10 分钟，跳过
+		if t.EndTime.Sub(*t.StartTime).Minutes() < 10 {
+			continue
+		}
 		mins := completedTaskDurationMinutes(*t.StartTime, *t.EndTime, loc)
 		if mins < 0 {
 			mins = 0
@@ -425,8 +433,8 @@ func GetTaskExecutionStats(c *gin.Context) {
 
 	var tasks []model.Task
 	if err := database.DB.Where(
-		"device_serial = ? AND status = ? AND start_time >= ? AND end_time IS NOT NULL AND start_time IS NOT NULL AND script_id IN ?",
-		serial, model.TaskStatusCompleted, cutoff, scriptIDs,
+		"device_serial = ? AND (status = ? OR status = ? ) AND start_time >= ?  AND script_id IN ?",
+		serial, model.TaskStatusCompleted, model.TaskStatusAbnormalEnd, cutoff, scriptIDs,
 	).Find(&tasks).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询失败"})
 		return
