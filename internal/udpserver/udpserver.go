@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gobackend/config"
 	"gobackend/internal/database"
 	"gobackend/internal/model"
 
@@ -315,7 +316,9 @@ func shouldRunCheckPlanTask(ctx context.Context, serial string) bool {
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
 func checkPlanTask(device *model.Device) {
-
+	if config.Cfg.IS_DEBUG {
+		return
+	}
 	if device == nil || device.ID == 0 {
 		fmt.Printf("checkPlanTask device is nil or id is 0\n")
 		return
