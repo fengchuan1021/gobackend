@@ -315,7 +315,9 @@ func shouldRunCheckPlanTask(ctx context.Context, serial string) bool {
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
 func checkPlanTask(device *model.Device) {
+
 	if device == nil || device.ID == 0 {
+		fmt.Printf("checkPlanTask device is nil or id is 0\n")
 		return
 	}
 
@@ -330,6 +332,7 @@ func checkPlanTask(device *model.Device) {
 		return
 	}
 	if pendingCount > 0 {
+		fmt.Printf("checkPlanTask pendingCount=%d\n", pendingCount)
 		return
 	}
 
@@ -338,9 +341,11 @@ func checkPlanTask(device *model.Device) {
 	if err := database.DB.
 		Where("device_id = ? AND user_id = ?", device.ID, device.UserID).
 		Find(&devicePlanTasks).Error; err != nil {
+		fmt.Printf("checkPlanTask get devicePlanTasks failed err=%v\n", err)
 		return
 	}
 	if len(devicePlanTasks) == 0 {
+		fmt.Printf("checkPlanTask devicePlanTasks is empty\n")
 		return
 	}
 	planTaskIDs := make([]uint, 0, len(devicePlanTasks))
@@ -352,9 +357,11 @@ func checkPlanTask(device *model.Device) {
 	if err := database.DB.
 		Where("id IN (?) AND user_id = ?", planTaskIDs, device.UserID).
 		Find(&planTasks).Error; err != nil {
+		fmt.Printf("checkPlanTask get planTasks failed err=%v\n", err)
 		return
 	}
 	if len(planTasks) == 0 {
+		fmt.Printf("checkPlanTask planTasks is empty\n")
 		return
 	}
 
@@ -364,6 +371,7 @@ func checkPlanTask(device *model.Device) {
 		Where("plan_task_id IN (?)", planTaskIDs).
 		Order("id ASC").
 		Find(&allItems).Error; err != nil {
+		fmt.Printf("checkPlanTask get allItems failed err=%v\n", err)
 		return
 	}
 	itemsByPlan := make(map[uint][]model.PlanTaskItem, len(planTasks))
@@ -381,11 +389,13 @@ func checkPlanTask(device *model.Device) {
 	var execRows []execRow
 	if err := database.DB.Model(&model.Task{}).
 		Select("script_id AS script_id, COALESCE(SUM(total_minutes), 0) AS executed_minutes").
-		Where("device_id = ? AND status!=4 AND CreatedAt >= ?", device.ID, todayStart).
+		Where("device_id = ? AND status!=4 AND created_at >= ?", device.ID, todayStart).
 		Group("script_id").
 		Scan(&execRows).Error; err != nil {
+		fmt.Printf("checkPlanTask get execRows failed err=%v\n", err)
 		return
 	}
+
 	executedByScript := make(map[uint]int, len(execRows))
 	for _, r := range execRows {
 		executedByScript[r.ScriptID] = r.ExecutedMinutes
