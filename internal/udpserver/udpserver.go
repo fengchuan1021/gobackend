@@ -55,7 +55,11 @@ const (
 	SerialIPKeyPrefix  = "serial-ip:user:"
 
 	maxDevicesPerIPCacheKeyFmt = "udpserver:maxdevicesperip:%d"
+	planTaskCheckCacheKeyFmt   = "udpserver:plantaskcheck:%d"
 )
+
+// planTaskCheckTTL checkPlanTask 同一设备的最小重判间隔
+const planTaskCheckTTL = 20 * time.Second
 
 func maxDevicesPerIpCacheTTL(limit int) time.Duration {
 	if limit == 0 {
@@ -290,6 +294,24 @@ func getMaxDevicesPerIp(userID uint) int {
 	return limit
 }
 
+// shouldRunCheckPlanTask 判断本次心跳是否需要再跑一次 checkPlanTask；
+// 同一设备 planTaskCheckTTL 内只判断一次（基于 redis SetNX 去重）。
+// 当 redis 不可用或调用出错时，回退为允许执行，避免影响主流程。
+func shouldRunCheckPlanTask(ctx context.Context, serial string) bool {
+	if serial == "" {
+		return true
+	}
+	if database.RDB == nil {
+		return true
+	}
+	//key := fmt.Sprintf(planTaskCheckCacheKeyFmt, serial)
+	ok, err := database.RDB.SetNX(ctx, serial, "1", planTaskCheckTTL).Result()
+	if err != nil {
+		return true
+	}
+	return ok
+}
+
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
 func checkPlanTask(device *model.Device) {
@@ -459,28 +481,32 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 			return
 		}
 	}
-	var device model.Device
-	if err := database.DB.Where("serial = ?", job.serial).First(&device).Error; err != nil {
 
-		log.Printf("get device failed serial=%s err=%v", job.serial, err)
-		return
+	//check plan task（同一设备 20s 内只判断一次）
+	if shouldRunCheckPlanTask(ctx, job.serial) {
+		var device model.Device
+		if err := database.DB.Where("serial = ?", job.serial).First(&device).Error; err != nil {
+
+			log.Printf("get device failed serial=%s err=%v", job.serial, err)
+			return
+		}
+		if device.ExpireAt != nil && device.ExpireAt.Before(time.Now()) {
+			return
+		}
+		checkPlanTask(&device)
+		var newTask model.Task
+		now := time.Now()
+		if err := database.DB.Where(
+			"device_serial = ? and (status=0 or status=6) and (on_hold_end_time IS NULL OR on_hold_end_time > ?)",
+			job.serial, now,
+		).First(&newTask).Error; err != nil {
+			return
+		}
+		if newTask.ID != 0 {
+			go SendCommand(job.serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), job.uid)
+		}
 	}
-	if device.ExpireAt != nil && device.ExpireAt.Before(time.Now()) {
-		return
-	}
-	//check plan task
-	checkPlanTask(&device)
-	var newTask model.Task
-	now := time.Now()
-	if err := database.DB.Where(
-		"device_serial = ? and (status=0 or status=6) and (on_hold_end_time IS NULL OR on_hold_end_time > ?)",
-		job.serial, now,
-	).First(&newTask).Error; err != nil {
-		return
-	}
-	if newTask.ID != 0 {
-		go SendCommand(job.serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), job.uid)
-	}
+
 }
 
 func handleHeartbeatJob(c *net.UDPConn, job heartbeatJob) {
