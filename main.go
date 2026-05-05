@@ -46,6 +46,9 @@ func main() {
 		&model.Blacklist{},
 		&model.DeviceGroup{},
 		&model.Tag{},
+		&model.PlanTask{},
+		&model.PlanTaskItem{},
+		&model.DevicePlanTask{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -126,6 +129,12 @@ func main() {
 		api.POST("/devices/sort_numbers", middleware.Auth, handler.UpdateDeviceSortNumbers)
 		api.PATCH("/devices/meta/:id", middleware.Auth, handler.UpdateDeviceMeta)
 		api.PATCH("/devices/add_device_expire_time/:id", middleware.Auth, handler.UpdateDevice)
+		api.POST("/plan_tasks/list", middleware.Auth, handler.ListPlanTasks)
+		api.POST("/plan_tasks/create", middleware.Auth, handler.CreatePlanTask)
+		api.POST("/plan_tasks/update", middleware.Auth, handler.UpdatePlanTask)
+		api.POST("/plan_tasks/delete", middleware.Auth, handler.DeletePlanTask)
+		api.POST("/plan_tasks/setDevices", middleware.Auth, handler.SetPlanTaskDevices)
+		api.POST("/plan_tasks/setItems", middleware.Auth, handler.SetPlanTaskItems)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
 		api.POST("/task/clientStopTask", middleware.Auth, handler.ClientStopTask)
