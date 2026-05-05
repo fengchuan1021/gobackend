@@ -288,6 +288,9 @@ func getMaxDevicesPerIp(userID uint) int {
 	}
 	return limit
 }
+func checkPlanTask(device *model.Device) {
+
+}
 
 // maybeRunPendingTaskFromHeartbeat 在设备空闲心跳时检查是否有待运行任务并下发
 func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
@@ -302,6 +305,7 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 		// 	log.Printf("remove running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
 		// }
 	}
+
 	n := getMaxDevicesPerIp(job.uid)
 	if n > 0 {
 		count, err := RunningTaskDeviceCount(ctx, job.uid, job.from.IP.String())
@@ -312,15 +316,26 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 			return
 		}
 	}
+	var device model.Device
+	if err := database.DB.Where("serial = ?", job.serial).First(&device).Error; err != nil {
+
+		log.Printf("get device failed serial=%s err=%v", job.serial, err)
+		return
+	}
+	if device.ExpireAt != nil && device.ExpireAt.Before(time.Now()) {
+		return
+	}
+	//check plan task
+	checkPlanTask(&device)
 	var newTask model.Task
 	now := time.Now()
-	if err := database.DB.Preload("Device").Where(
+	if err := database.DB.Where(
 		"device_serial = ? and (status=0 or status=6) and (on_hold_end_time IS NULL OR on_hold_end_time > ?)",
 		job.serial, now,
 	).First(&newTask).Error; err != nil {
 		return
 	}
-	if newTask.Device.ExpireAt != nil && newTask.Device.ExpireAt.After(now) && newTask.ID != 0 {
+	if newTask.ID != 0 {
 		go SendCommand(job.serial, CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), job.uid)
 	}
 }
