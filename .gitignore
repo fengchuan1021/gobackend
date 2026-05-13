@@ -7,3 +7,4 @@ product.env
 
 # Go
 vendor/
+redis-data/
