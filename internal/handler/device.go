@@ -448,24 +448,56 @@ func ResetDeviceBySerial(c *gin.Context) {
 }
 
 func GetDevicesTree(c *gin.Context) {
+	type GetDevicesTreeReq struct {
+		Allusers bool `json:"allusers"`
+	}
+	type deviceGroupNode struct {
+		ID        uint           `json:"id"`
+		GroupName string         `json:"group_name"`
+		Devices   []model.Device `json:"devices"`
+	}
+	var req GetDevicesTreeReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
 	userIDRaw, exists := c.Get(middleware.UserIDKey)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
 		return
 	}
 	uid := userIDRaw.(uint)
-
+	roleID, exists := c.Get(middleware.RoleIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
+		return
+	}
+	roleIDValue := roleID.(uint)
 	var deviceGroups []model.DeviceGroup
+	if roleIDValue == 1 && req.Allusers {
+		var allDevices []model.Device
+		if err := database.DB.
+			Find(&allDevices).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询默认分组设备失败"})
+			return
+		}
+		result1 := make([]deviceGroupNode, 0, 1)
+		tmpresult := deviceGroupNode{
+			ID:        0,
+			GroupName: "默认分组",
+			Devices:   allDevices,
+		}
+		result1 = append(result1, tmpresult)
+
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result1})
+
+		return
+	}
+
 	err := database.DB.Where("user_id = ?", uid).Order("id ASC").Find(&deviceGroups).Error
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询分组失败"})
 		return
-	}
-
-	type deviceGroupNode struct {
-		ID        uint           `json:"id"`
-		GroupName string         `json:"group_name"`
-		Devices   []model.Device `json:"devices"`
 	}
 
 	result := make([]deviceGroupNode, 0, len(deviceGroups)+1)

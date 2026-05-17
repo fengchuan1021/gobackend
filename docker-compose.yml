@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: antares-mysql
+    restart: always
+
+    ports:
+      - "3306:3306"
+
+    environment:
+      MYSQL_ROOT_PASSWORD: yangyongli89771021
+      MYSQL_DATABASE: antares
+      TZ: Asia/Shanghai
+
+    command:
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+
+    volumes:
+      - ./data:/var/lib/mysql
+      - ./logs:/var/log/mysql
+      - ./conf/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./init:/docker-entrypoint-initdb.d
+
+    networks:
+      - antares-net
+
+
+  redis:
+    image: redis:8
+    container_name: antares-redis
+    restart: always
+
+    ports:
+      - "6379:6379"
+
+    command: >
+      redis-server
+      --requirepass password8977
+      --appendonly yes
+
+    volumes:
+      - ./redis-data:/data
+
+    networks:
+      - antares-net
+
+
+networks:
+  antares-net:
