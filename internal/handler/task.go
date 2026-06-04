@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -111,13 +112,15 @@ func ClientAddTask(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "输入不正确"})
 		return
 	}
-	// argsBytes, err := json.Marshal(req.Params)
-	// if err != nil {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
-	// 	return
-	// }
-	//argsStr := string(argsBytes)
-	argsStr := ""
+	argsBytes, err := json.Marshal(req.Params)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
+		return
+	}
+
+	argsStr := string(argsBytes)
+
+	//argsStr := ""
 	if len(req.Serials) <= 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "序列号未填"})
 	}
