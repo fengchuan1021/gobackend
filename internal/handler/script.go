@@ -104,7 +104,7 @@ func GetScriptsTree(c *gin.Context) {
 		// 排除 content 字段，不加载到内存
 		err := database.DB.Model(&model.Script{}).
 			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market", "is_in_netdisk", "is_virtual_package").
-			Where("category_id = ?", cat.ID).
+			Where("category_id = ?", cat.ID).Order("sort_order desc").
 			Find(&scripts).Error
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询脚本失败"})

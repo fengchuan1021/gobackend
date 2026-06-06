@@ -142,6 +142,8 @@ func main() {
 		api.POST("/plan_tasks/setItems", middleware.Auth, handler.SetPlanTaskItems)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
+		api.POST("/task/clientAddSubTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientAddSubTask)
+		api.POST("/task/clientGetScriptIdByExecureHistory", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientGetScriptIdByExecureHistory)
 		api.POST("/task/clientStopTask", middleware.Auth, handler.ClientStopTask)
 		api.POST("/task/clientFinishTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientFinishTask)
 		api.POST("/task/executionStats", middleware.Auth, handler.GetTaskExecutionStats)

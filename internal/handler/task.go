@@ -123,6 +123,7 @@ func ClientAddTask(c *gin.Context) {
 	//argsStr := ""
 	if len(req.Serials) <= 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "序列号未填"})
+		return
 	}
 	if req.Rounds == 0 {
 		req.Rounds = 1
@@ -188,6 +189,90 @@ func ClientAddTask(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "no device found"})
+}
+
+func ClientAddSubTask(c *gin.Context) {
+	userID, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		fmt.Println("user not found")
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
+		return
+	}
+	uid := userID.(uint)
+	var user model.User
+	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
+		fmt.Println("user not found2")
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户不存在"})
+		return
+	}
+	if user.IsActive == false {
+		fmt.Println("user not active")
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "用户未激活"})
+		return
+	}
+	var req ClientAddTaskReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("input not correct")
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "输入不正确"})
+		return
+	}
+	argsBytes, err := json.Marshal(req.Params)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
+		return
+	}
+
+	argsStr := string(argsBytes)
+
+	//argsStr := ""
+	if len(req.Serials) <= 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "序列号未填"})
+		return
+	}
+	if req.Rounds == 0 {
+		req.Rounds = 1
+	}
+
+	for _, serial := range req.Serials {
+		var device model.Device
+		if err := database.DB.Where("serial = ?", serial).First(&device).Error; err != nil {
+			continue
+		}
+
+		if device.ExpireAt == nil || device.ExpireAt.Before(time.Now()) {
+			continue
+		}
+		var task model.Task
+
+		for _, scriptID := range req.ScriptIDs {
+			task = model.Task{
+				UserID:       device.UserID,
+				DeviceID:     device.ID,
+				DeviceSerial: serial,
+				ScriptID:     uint(scriptID),
+				Args:         argsStr,
+				StartTime:    nil,
+				EndTime:      nil,
+				TotalMinutes: req.Time,
+				TotalRound:   req.Rounds,
+				LeftRound:    req.Rounds,
+				LeftMinute:   req.Time,
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}
+			if err := database.DB.Create(&task).Error; err != nil {
+				continue
+			}
+
+			if task.ID > 0 {
+				c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": task.ID})
+				return
+			}
+		}
+
+	}
+
 	c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "no device found"})
 }
 
@@ -458,5 +543,116 @@ func GetTaskExecutionStats(c *gin.Context) {
 		"data": gin.H{
 			"stats": statsOut,
 		},
+	})
+}
+
+type ClientGetScriptIdByExecureHistoryReq struct {
+	Serial     string `json:"serial" binding:"required"`
+	CategoryID int    `json:"category_id" binding:"required"`
+}
+
+// ClientGetScriptIdByExecureHistory 按分类返回脚本 ID 列表：
+// 取指定设备近一个月内执行记录，按 script_id 汇总执行时长（EndTime-StartTime）升序；
+// 单次执行时长不足 4 分钟的记录忽略；未执行过的脚本总时长视为 0。
+func ClientGetScriptIdByExecureHistory(c *gin.Context) {
+	var req ClientGetScriptIdByExecureHistoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serial is required"})
+		return
+	}
+	serial := req.Serial
+	if serial == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serial is empty"})
+		return
+	}
+	if req.CategoryID <= 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "category_id is invalid"})
+		return
+	}
+	var device model.Device
+	if err := database.DB.Where("serial = ?", serial).First(&device).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "device not found"})
+		return
+	}
+
+	var scripts []model.Script
+	if err := database.DB.Where("category_id = ? and is_virtual_package=0", req.CategoryID).
+		Order("sort_order ASC, id ASC").
+		Find(&scripts).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询脚本失败"})
+		return
+	}
+	if len(scripts) == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": []uint{}})
+		return
+	}
+
+	scriptIDs := make([]uint, 0, len(scripts))
+	for _, s := range scripts {
+		scriptIDs = append(scriptIDs, s.ID)
+	}
+
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.UTC
+	}
+	cutoff := time.Now().In(loc).AddDate(0, -1, 0)
+
+	var tasks []model.Task
+	if err := database.DB.Where(
+		"device_serial = ? AND start_time >= ? AND start_time IS NOT NULL AND end_time IS NOT NULL AND script_id IN ?",
+		serial, cutoff, scriptIDs,
+	).Find(&tasks).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询执行记录失败"})
+		return
+	}
+
+	totals := make(map[uint]int, len(scripts))
+	for _, t := range tasks {
+		if t.StartTime == nil || t.EndTime == nil {
+			continue
+		}
+		if t.EndTime.Sub(*t.StartTime).Minutes() < 4 {
+			continue
+		}
+		mins := completedTaskDurationMinutes(*t.StartTime, *t.EndTime, loc)
+		if mins < 0 {
+			mins = 0
+		}
+		totals[t.ScriptID] += mins
+	}
+
+	type scriptRank struct {
+		scriptID  uint
+		totalMins int
+		sortOrder int
+	}
+	ranked := make([]scriptRank, 0, len(scripts))
+	for _, s := range scripts {
+		ranked = append(ranked, scriptRank{
+			scriptID:  s.ID,
+			totalMins: totals[s.ID],
+			sortOrder: s.SortOrder,
+		})
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].totalMins != ranked[j].totalMins {
+			return ranked[i].totalMins < ranked[j].totalMins
+		}
+		if ranked[i].sortOrder != ranked[j].sortOrder {
+			return ranked[i].sortOrder < ranked[j].sortOrder
+		}
+		return ranked[i].scriptID < ranked[j].scriptID
+	})
+
+	result := make([]uint, 0, len(ranked))
+	for _, r := range ranked {
+		result = append(result, r.scriptID)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "ok",
+		"data": result,
 	})
 }
