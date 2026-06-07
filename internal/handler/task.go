@@ -551,9 +551,9 @@ type ClientGetScriptIdByExecureHistoryReq struct {
 	CategoryID int    `json:"category_id" binding:"required"`
 }
 
-// ClientGetScriptIdByExecureHistory 按分类返回脚本 ID 列表：
+// ClientGetScriptIdByExecureHistory 按分类返回脚本执行排行（JSON 数组）：
 // 取指定设备近一个月内执行记录，按 script_id 汇总执行时长（EndTime-StartTime）升序；
-// 单次执行时长不足 4 分钟的记录忽略；未执行过的脚本总时长视为 0。
+// 单次执行时长不足 4 分钟的记录忽略；未执行过的脚本 total_mins 为 0。
 func ClientGetScriptIdByExecureHistory(c *gin.Context) {
 	var req ClientGetScriptIdByExecureHistoryReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -575,84 +575,43 @@ func ClientGetScriptIdByExecureHistory(c *gin.Context) {
 		return
 	}
 
-	var scripts []model.Script
-	if err := database.DB.Where("category_id = ? and is_virtual_package=0", req.CategoryID).
-		Order("sort_order ASC, id ASC").
-		Find(&scripts).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询脚本失败"})
-		return
-	}
-	if len(scripts) == 0 {
-		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": []uint{}})
-		return
-	}
-
-	scriptIDs := make([]uint, 0, len(scripts))
-	for _, s := range scripts {
-		scriptIDs = append(scriptIDs, s.ID)
-	}
-
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		loc = time.UTC
 	}
 	cutoff := time.Now().In(loc).AddDate(0, -1, 0)
 
-	var tasks []model.Task
-	if err := database.DB.Where(
-		"device_serial = ? AND start_time >= ? AND start_time IS NOT NULL AND end_time IS NOT NULL AND script_id IN ?",
-		serial, cutoff, scriptIDs,
-	).Find(&tasks).Error; err != nil {
+	type scriptExecRank struct {
+		ScriptID    uint   `gorm:"column:id" json:"script_id"`
+		SortOrder   int    `gorm:"column:sort_order" json:"sort_order"`
+		TotalMins   int    `gorm:"column:total_mins" json:"total_mins"`
+		PackageName string `gorm:"column:package_name" json:"package_name"`
+	}
+	var ranked []scriptExecRank
+	if err := database.DB.Raw(`
+		SELECT s.id, s.sort_order,
+			COALESCE(SUM(TIMESTAMPDIFF(MINUTE, t.start_time, t.end_time)), 0) AS total_mins,
+			s.package_name
+		FROM scripts s
+		LEFT JOIN tasks t ON t.script_id = s.id
+			AND t.device_serial = ?
+			AND t.start_time >= ?
+			AND TIMESTAMPDIFF(SECOND, t.start_time, t.end_time) >= ?
+		WHERE s.category_id = ? AND s.is_virtual_package = 0
+		GROUP BY s.id
+		ORDER BY total_mins ASC
+	`, serial, cutoff, 4*60, req.CategoryID).Scan(&ranked).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "查询执行记录失败"})
 		return
 	}
 
-	totals := make(map[uint]int, len(scripts))
-	for _, t := range tasks {
-		if t.StartTime == nil || t.EndTime == nil {
-			continue
-		}
-		if t.EndTime.Sub(*t.StartTime).Minutes() < 4 {
-			continue
-		}
-		mins := completedTaskDurationMinutes(*t.StartTime, *t.EndTime, loc)
-		if mins < 0 {
-			mins = 0
-		}
-		totals[t.ScriptID] += mins
-	}
-
-	type scriptRank struct {
-		scriptID  uint
-		totalMins int
-		sortOrder int
-	}
-	ranked := make([]scriptRank, 0, len(scripts))
-	for _, s := range scripts {
-		ranked = append(ranked, scriptRank{
-			scriptID:  s.ID,
-			totalMins: totals[s.ID],
-			sortOrder: s.SortOrder,
-		})
-	}
-	sort.Slice(ranked, func(i, j int) bool {
-		if ranked[i].totalMins != ranked[j].totalMins {
-			return ranked[i].totalMins < ranked[j].totalMins
-		}
-		if ranked[i].sortOrder != ranked[j].sortOrder {
-			return ranked[i].sortOrder < ranked[j].sortOrder
-		}
-		return ranked[i].scriptID < ranked[j].scriptID
-	})
-
-	result := make([]uint, 0, len(ranked))
-	for _, r := range ranked {
-		result = append(result, r.scriptID)
+	if ranked == nil {
+		ranked = []scriptExecRank{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 200,
 		"msg":  "ok",
-		"data": result,
+		"data": ranked,
 	})
 }
