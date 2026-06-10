@@ -321,6 +321,29 @@ func GetTrickStoreConfig(c *gin.Context) {
 	}
 }
 
+// GetAppsCategory 返回包名到脚本分类 ID 的映射
+// POST /api/device/getappcategorys
+func GetAppsCategory(c *gin.Context) {
+	var scripts []model.Script
+	if err := database.DB.Select("package_name", "category_id").
+		Where("package_name <> ''").
+		Find(&scripts).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "查询失败"})
+		return
+	}
+
+	result := make(map[string]uint, len(scripts))
+	for _, s := range scripts {
+		pkg := strings.TrimSpace(s.PackageName)
+		if pkg == "" {
+			continue
+		}
+		result[pkg] = s.CategoryID
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 200, "data": result})
+}
+
 // GetWhitelistApps 获取白名单应用
 // POST /api/device/getwhitelistapps
 func GetWhitelistApps(c *gin.Context) {
