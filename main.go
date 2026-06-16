@@ -170,7 +170,6 @@ func main() {
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
 	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
 	go udpserver.Run(config.Cfg.Server.UDPPort)
-
 	addr := ":" + config.Cfg.Server.Port
 
 	if err := r.Run(addr); err != nil {
