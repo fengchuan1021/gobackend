@@ -167,7 +167,6 @@ func main() {
 		api.POST("/third/getQuNaTaskSummaryList", middleware.Auth, handler.GetQuNaTaskSummaryList)
 
 	}
-
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
 	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
 	go udpserver.Run(config.Cfg.Server.UDPPort)
