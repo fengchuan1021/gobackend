@@ -16,7 +16,8 @@ type User struct {
 	RoleID          uint      `gorm:"index;not null" json:"role_id"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
-	MaxDevicesPerIp int       `gorm:"default:0" json:"max_devices_per_ip"`
+	MaxDevicesPerIp       int `gorm:"default:0" json:"max_devices_per_ip"`
+	SleepAfterTaskMinutes int `gorm:"default:0" json:"sleep_after_task_minutes"`
 }
 
 // TableName 指定表名

@@ -8,4 +8,5 @@ product.env
 # Go
 vendor/
 redis-data/1
- redis-data/
+redis-data/
+
