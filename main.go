@@ -171,7 +171,6 @@ func main() {
 	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
 	go udpserver.Run(config.Cfg.Server.UDPPort)
 	addr := ":" + config.Cfg.Server.Port
-
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
