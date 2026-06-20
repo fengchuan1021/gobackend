@@ -75,6 +75,7 @@ func GetTaskDetail(c *gin.Context) {
 			"package_name":    task.Script.PackageName,
 			"commonjsversion": commonjs_version,
 			"scriptid":        fmt.Sprintf("%v", task.ScriptID),
+			"category_id":     fmt.Sprintf("%v", task.Script.CategoryID),
 		},
 	})
 }
