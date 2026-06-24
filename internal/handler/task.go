@@ -61,11 +61,17 @@ func GetTaskDetail(c *gin.Context) {
 		TotalMinutes int64 `gorm:"column:total_minutes"`
 		TotalCount   int64 `gorm:"column:total_count"`
 	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.UTC
+	}
+	nowInLoc := now.In(loc)
+	todayStart := time.Date(nowInLoc.Year(), nowInLoc.Month(), nowInLoc.Day(), 0, 0, 0, 0, loc)
 	database.DB.Model(&model.Task{}).
 		Select("COALESCE(SUM(total_minutes), 0) AS total_minutes, COUNT(*) AS total_count").
 		Where(
-			"script_id = ? AND device_serial = ? AND status = ?",
-			task.ScriptID, task.DeviceSerial, model.TaskStatusCompleted,
+			"script_id = ? AND device_serial = ? AND status = ? AND start_time >= ?",
+			task.ScriptID, task.DeviceSerial, model.TaskStatusCompleted, todayStart,
 		).
 		Scan(&completedStats)
 
