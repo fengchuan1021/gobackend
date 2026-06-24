@@ -36,6 +36,8 @@ type UserProfile struct {
 	RoleID       uint      `json:"role_id"`
 	IsBanned     bool      `json:"is_banned"`
 	RegisterTime time.Time `json:"register_time"`
+	ExpireAt     string    `json:"expire_at"`
+	IsSvip       bool      `json:"is_svip"`
 }
 type RegisterReq struct {
 	Username string `json:"username" binding:"required"`
@@ -203,6 +205,39 @@ func GetUserProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": toProfile(&user)})
+}
+
+func GetUserProfileWithSerial(c *gin.Context) {
+	serial := c.Query("serial")
+	if serial == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": ""})
+		return
+	}
+	var device model.Device
+	err := database.DB.Where("serial = ?", serial).First(&device).Error
+
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": ""})
+		return
+	}
+	data := ""
+	if device.ExpireAt != nil {
+		data = device.ExpireAt.Format("2006-01-02")
+	}
+	is_svip := false
+	if device.IsSvip {
+		is_svip = true
+	}
+	var user model.User
+	if err := database.DB.Where("id = ?", device.UserID).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+	//c.JSON(http.StatusOK, gin.H{"code": 200, "data": data})
+	tmp := toProfile(&user)
+	tmp.ExpireAt = data
+	tmp.IsSvip = is_svip
+	c.JSON(http.StatusOK, gin.H{"data": tmp})
 }
 
 func toProfile(u *model.User) UserProfile {

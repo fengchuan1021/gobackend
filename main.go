@@ -114,6 +114,7 @@ func main() {
 		api.POST("/device/getwhitelistapps", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetWhitelistApps)
 		api.POST("/device/getappcategorys", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetAppsCategory)
 		api.GET("/devices/expireTime", middleware.Auth, handler.GetDeviceExpireTime)
+		api.GET("/user/profileWithSerial", middleware.Auth, handler.GetUserProfileWithSerial)
 		api.POST("/devices/save_profile_note", middleware.Auth, handler.SaveProfileNote)
 		api.GET("/devices/get_profile_note", middleware.Auth, handler.GetProfileNote)
 		api.POST("/devices/save_profile_serial", middleware.Auth, handler.SaveProfileSerial)

@@ -57,6 +57,18 @@ func GetTaskDetail(c *gin.Context) {
 	task.Status = model.TaskStatusRunning
 	database.DB.Save(&task)
 
+	var completedStats struct {
+		TotalMinutes int64 `gorm:"column:total_minutes"`
+		TotalCount   int64 `gorm:"column:total_count"`
+	}
+	database.DB.Model(&model.Task{}).
+		Select("COALESCE(SUM(total_minutes), 0) AS total_minutes, COUNT(*) AS total_count").
+		Where(
+			"script_id = ? AND device_serial = ? AND status = ?",
+			task.ScriptID, task.DeviceSerial, model.TaskStatusCompleted,
+		).
+		Scan(&completedStats)
+
 	scriptEncoded := base21.EncodeToString(content)
 	commonjs_path := config.Cfg.SOLUTION_DIR + "/antares_assets/common.js"
 	commonjs_info, err := os.Stat(commonjs_path)
@@ -69,13 +81,15 @@ func GetTaskDetail(c *gin.Context) {
 		"code": 200,
 		"msg":  "ok",
 		"data": gin.H{
-			"script":          scriptEncoded,
-			"args":            task.Args,
-			"total_minutes":   task.TotalMinutes,
-			"package_name":    task.Script.PackageName,
-			"commonjsversion": commonjs_version,
-			"scriptid":        fmt.Sprintf("%v", task.ScriptID),
-			"category_id":     fmt.Sprintf("%v", task.Script.CategoryID),
+			"script":            scriptEncoded,
+			"args":              task.Args,
+			"total_minutes":     task.TotalMinutes,
+			"completed_minutes": completedStats.TotalMinutes,
+			"completed_count":   completedStats.TotalCount,
+			"package_name":      task.Script.PackageName,
+			"commonjsversion":   commonjs_version,
+			"scriptid":          fmt.Sprintf("%v", task.ScriptID),
+			"category_id":       fmt.Sprintf("%v", task.Script.CategoryID),
 		},
 	})
 }

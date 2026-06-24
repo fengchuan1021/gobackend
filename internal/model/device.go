@@ -22,6 +22,7 @@ type Device struct {
 	User          User        `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
 	Tag           Tag         `gorm:"foreignKey:TagID;constraint:-" json:"tag,omitempty"`
 	Group         DeviceGroup `gorm:"foreignKey:GroupID;constraint:-" json:"group,omitempty"`
+	IsSvip        bool        `gorm:"default:false" json:"is_svip"`
 }
 
 // TableName 指定表名
