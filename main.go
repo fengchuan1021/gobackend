@@ -52,6 +52,7 @@ func main() {
 		&model.PlanTask{},
 		&model.PlanTaskItem{},
 		&model.DevicePlanTask{},
+		&model.QuestionAnswer{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -149,6 +150,7 @@ func main() {
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
 		api.POST("/task/clientAddSubTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientAddSubTask)
 		api.POST("/task/clientGetScriptIdByExecureHistory", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientGetScriptIdByExecureHistory)
+		api.POST("/questionapp/answer", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.AnswerQuestion)
 		api.POST("/task/clientStopTask", middleware.Auth, handler.ClientStopTask)
 		api.POST("/task/clientFinishTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientFinishTask)
 		api.POST("/task/executionStats", middleware.Auth, handler.GetTaskExecutionStats)

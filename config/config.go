@@ -16,9 +16,14 @@ type Config struct {
 	MySQL        MySQLConfig
 	Redis        RedisConfig
 	Server       ServerConfig
+	DeepSeek     DeepSeekConfig
 	BASE_DIR     string
 	SOLUTION_DIR string
 	IS_DEBUG     bool
+}
+
+type DeepSeekConfig struct {
+	APIKey string
 }
 
 type MySQLConfig struct {
@@ -83,6 +88,9 @@ func Load(env string) error {
 			Port:    getEnv("SERVER_PORT", "8080"),
 			UDPPort: getEnvInt("UDP_PORT", 8080),
 			Mode:    getEnv("GIN_MODE", "debug"),
+		},
+		DeepSeek: DeepSeekConfig{
+			APIKey: getEnv("DEEPSEEK_API_KEY", ""),
 		},
 	}
 
