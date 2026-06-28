@@ -457,7 +457,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 			}
 			dedupeKey := planTaskItemDedupeKey(device.ID, item.ScriptID)
 			if database.RDB != nil {
-				ok, err := database.RDB.SetNX(context.Background(), dedupeKey, "1", planTaskItemDedupeTTL).Result()
+				ok, err := database.RDB.SetNX(context.Background(), dedupeKey, "1", time.Duration(pt.IdleMinutes+1)*time.Minute).Result()
 				if err != nil {
 					log.Printf("set plan task dedupe key failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
 				} else if !ok {
