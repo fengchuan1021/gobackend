@@ -380,7 +380,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 	// 2. 一次拉取所有相关条目，按 plan_task_id 归类
 	var allItems []model.PlanTaskItem
 	if err := database.DB.
-		Where("plan_task_id IN (?)", planTaskIDs).
+		Where("plan_task_id IN (?) and left_round>0", planTaskIDs).
 		Order("id ASC").
 		Find(&allItems).Error; err != nil {
 		fmt.Printf("checkPlanTask get allItems failed err=%v\n", err)
@@ -461,9 +461,11 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 				if err != nil {
 					log.Printf("set plan task dedupe key failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
 				} else if !ok {
+					fmt.Printf("exists continue")
 					continue
 				}
 			}
+			fmt.Printf("what a")
 			task := model.Task{
 				UserID:         device.UserID,
 				DeviceID:       device.ID,
@@ -473,8 +475,8 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 				StartTime:      nil,
 				EndTime:        nil,
 				TotalMinutes:   duration,
-				TotalRound:     round,
-				LeftRound:      round,
+				TotalRound:     1,
+				LeftRound:      1,
 				LeftMinute:     duration,
 				Status:         model.TaskStatusNotStarted,
 				PlanTaskID:     int(pt.ID),
@@ -488,6 +490,11 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 					_ = database.RDB.Del(context.Background(), dedupeKey).Err()
 				}
 				continue
+			}
+			if err := database.DB.Model(&model.PlanTaskItem{}).
+				Where("id = ?", item.ID).
+				Update("left_round", item.LeftRound-1).Error; err != nil {
+				log.Printf("decrement plan task item total_round failed item=%d err=%v", item.ID, err)
 			}
 			// 把刚刚入队的执行时长计入，避免同一脚本被本轮循环重复入队
 			executedByScript[item.ScriptID] = executed + duration

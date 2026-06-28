@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
@@ -10,6 +11,7 @@ import (
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
 	"gobackend/internal/model/third"
+	"gobackend/internal/scheduler"
 	"gobackend/internal/udpserver"
 	"gobackend/internal/websocket"
 
@@ -61,6 +63,8 @@ func main() {
 		log.Fatalf("Redis 连接失败: %v", err)
 	}
 	log.Println("Redis 连接成功")
+
+	go scheduler.StartPlanTaskItemLeftRoundResetLoop(context.Background())
 
 	gin.SetMode(config.Cfg.Server.Mode)
 	r := gin.Default()

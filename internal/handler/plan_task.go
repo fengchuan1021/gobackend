@@ -469,6 +469,7 @@ func SetPlanTaskItems(c *gin.Context) {
 			StartTime:      startTime,
 			Args:           args,
 			TotalRound:     round,
+			LeftRound:      round,
 			DurationMinute: duration,
 			PackageName:    pkg,
 		}

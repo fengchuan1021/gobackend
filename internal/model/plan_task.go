@@ -33,6 +33,7 @@ type PlanTaskItem struct {
 	StartTime      string    `gorm:"type:char(5)" json:"start_time"` // 24小时制，格式 HH:mm
 	Args           string    `gorm:"type:json" json:"args"`
 	TotalRound     int       `gorm:"default:0" json:"total_round"`
+	LeftRound      int       `gorm:"default:0" json:"left_round"`
 	DurationMinute int       `gorm:"default:0" json:"duration_minute"`
 	PackageName    string    `gorm:"type:varchar(255)" json:"package_name"`
 	CreatedAt      time.Time `json:"created_at"`
