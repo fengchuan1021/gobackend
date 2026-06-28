@@ -61,6 +61,15 @@ const (
 // planTaskCheckTTL checkPlanTask 同一设备的最小重判间隔
 const planTaskCheckTTL = 20 * time.Second
 
+// planTaskItemDedupeTTL 同一设备同一脚本计划任务入队的最小间隔
+const planTaskItemDedupeTTL = 30 * time.Minute
+
+const planTaskItemDedupeKeyFmt = "udpserver:plantask:dedupe:%d_%d"
+
+func planTaskItemDedupeKey(deviceID, scriptID uint) string {
+	return fmt.Sprintf(planTaskItemDedupeKeyFmt, deviceID, scriptID)
+}
+
 func maxDevicesPerIpCacheTTL(limit int) time.Duration {
 	if limit == 0 {
 		return 5 * time.Minute
@@ -446,6 +455,15 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 					continue
 				}
 			}
+			dedupeKey := planTaskItemDedupeKey(device.ID, item.ScriptID)
+			if database.RDB != nil {
+				ok, err := database.RDB.SetNX(context.Background(), dedupeKey, "1", planTaskItemDedupeTTL).Result()
+				if err != nil {
+					log.Printf("set plan task dedupe key failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+				} else if !ok {
+					continue
+				}
+			}
 			task := model.Task{
 				UserID:         device.UserID,
 				DeviceID:       device.ID,
@@ -466,6 +484,9 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 			}
 			if err := database.DB.Create(&task).Error; err != nil {
 				log.Printf("create plan task row failed device=%s script=%d err=%v", device.Serial, item.ScriptID, err)
+				if database.RDB != nil {
+					_ = database.RDB.Del(context.Background(), dedupeKey).Err()
+				}
 				continue
 			}
 			// 把刚刚入队的执行时长计入，避免同一脚本被本轮循环重复入队
