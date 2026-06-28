@@ -70,10 +70,10 @@ func planTaskItemDedupeKey(deviceID, scriptID uint) string {
 	return fmt.Sprintf(planTaskItemDedupeKeyFmt, deviceID, scriptID)
 }
 
-const script_left_round = "device_script_left_round:%d_%d"
+const scriptLeftRoundKeyFmt = "device_script_left_round:%d_%d"
 
-func deviceScriptLeftRoundKey(deviceID, scriptID uint) string {
-	return fmt.Sprintf(script_left_round, deviceID, scriptID)
+func DeviceScriptLeftRoundKey(deviceID, scriptID uint) string {
+	return fmt.Sprintf(scriptLeftRoundKeyFmt, deviceID, scriptID)
 }
 
 func maxDevicesPerIpCacheTTL(limit int) time.Duration {
@@ -461,7 +461,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 					continue
 				}
 			}
-			leftRoundKey := deviceScriptLeftRoundKey(device.ID, item.ScriptID)
+			leftRoundKey := DeviceScriptLeftRoundKey(device.ID, item.ScriptID)
 			leftRound := 0
 			if database.RDB != nil {
 				ctx := context.Background()

@@ -7,8 +7,7 @@ import (
 
 	"gobackend/internal/database"
 	"gobackend/internal/model"
-
-	"gorm.io/gorm"
+	"gobackend/internal/udpserver"
 )
 
 const planTaskItemResetHour = 0
@@ -24,11 +23,61 @@ func nextPlanTaskItemResetTime(now time.Time) time.Time {
 	return today.Add(24 * time.Hour)
 }
 
-// ResetPlanTaskItemLeftRounds 将所有 PlanTaskItem 的 left_round 重置为 total_round。
+// ResetPlanTaskItemLeftRounds 按 DevicePlanTask 关联关系，将 Redis 中
+// device_script_left_round:{deviceID}_{scriptID} 重置为对应 PlanTaskItem 的 total_round。
 func ResetPlanTaskItemLeftRounds() error {
-	result := database.DB.Model(&model.PlanTaskItem{}).
-		Update("left_round", gorm.Expr("total_round"))
-	return result.Error
+	if database.RDB == nil {
+		return nil
+	}
+
+	var devicePlanTasks []model.DevicePlanTask
+	if err := database.DB.Find(&devicePlanTasks).Error; err != nil {
+		return err
+	}
+	if len(devicePlanTasks) == 0 {
+		return nil
+	}
+
+	planTaskIDSet := make(map[uint]struct{}, len(devicePlanTasks))
+	for _, dpt := range devicePlanTasks {
+		planTaskIDSet[dpt.PlanTaskID] = struct{}{}
+	}
+	planTaskIDs := make([]uint, 0, len(planTaskIDSet))
+	for id := range planTaskIDSet {
+		planTaskIDs = append(planTaskIDs, id)
+	}
+
+	var items []model.PlanTaskItem
+	if err := database.DB.Where("plan_task_id IN ?", planTaskIDs).Find(&items).Error; err != nil {
+		return err
+	}
+	itemsByPlan := make(map[uint][]model.PlanTaskItem, len(planTaskIDs))
+	for _, item := range items {
+		itemsByPlan[item.PlanTaskID] = append(itemsByPlan[item.PlanTaskID], item)
+	}
+
+	ctx := context.Background()
+	pipe := database.RDB.Pipeline()
+	n := 0
+	for _, dpt := range devicePlanTasks {
+		for _, item := range itemsByPlan[dpt.PlanTaskID] {
+			if item.ScriptID == 0 {
+				continue
+			}
+			totalRound := item.TotalRound
+			if totalRound <= 0 {
+				totalRound = 1
+			}
+			key := udpserver.DeviceScriptLeftRoundKey(dpt.DeviceID, item.ScriptID)
+			pipe.Set(ctx, key, totalRound, 0)
+			n++
+		}
+	}
+	if n == 0 {
+		return nil
+	}
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // StartPlanTaskItemLeftRoundResetLoop 每天 00:01 重置 PlanTaskItem 剩余轮次。
