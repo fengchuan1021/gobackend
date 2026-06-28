@@ -39,6 +39,7 @@ type planTaskItemView struct {
 	UserID         uint                 `json:"user_id"`
 	ExecutionOrder int                  `json:"execution_order"` // 1顺序 2乱序
 	IsTimedTrigger bool                 `json:"is_timed_trigger"`
+	IdleMinutes    int                  `json:"idle_minutes"`
 	Devices        []planTaskDeviceItem `json:"devices"`
 	Items          []planTaskItemEntry  `json:"items"`
 }
@@ -164,6 +165,7 @@ func ListPlanTasks(c *gin.Context) {
 			UserID:         t.UserID,
 			ExecutionOrder: t.ExecutionOrder,
 			IsTimedTrigger: t.IsTimedTrigger,
+			IdleMinutes:    t.IdleMinutes,
 			Devices:        groupedByTask[t.ID],
 			Items:          itemsByTask[t.ID],
 		})
@@ -176,6 +178,7 @@ type savePlanTaskReq struct {
 	Name           string `json:"name" binding:"required"`
 	ExecutionOrder int    `json:"execution_order"`
 	IsTimedTrigger bool   `json:"is_timed_trigger"`
+	IdleMinutes    int    `json:"idle_minutes"`
 }
 
 // CreatePlanTask 创建计划任务
@@ -205,6 +208,7 @@ func CreatePlanTask(c *gin.Context) {
 		UserID:         uid,
 		ExecutionOrder: order,
 		IsTimedTrigger: req.IsTimedTrigger,
+		IdleMinutes:    normalizeIdleMinutes(req.IdleMinutes),
 	}
 	if err := database.DB.Create(&planTask).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "创建失败"})
@@ -245,6 +249,7 @@ func UpdatePlanTask(c *gin.Context) {
 	planTask.Name = name
 	planTask.ExecutionOrder = normalizePlanTaskOrder(req.ExecutionOrder)
 	planTask.IsTimedTrigger = req.IsTimedTrigger
+	planTask.IdleMinutes = normalizeIdleMinutes(req.IdleMinutes)
 	if err := database.DB.Save(&planTask).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "更新失败"})
 		return
@@ -484,4 +489,12 @@ func normalizePlanTaskOrder(v int) int {
 		return model.PlanTaskExecutionOrderRandom
 	}
 	return model.PlanTaskExecutionOrderSequential
+}
+
+// normalizeIdleMinutes 空闲分钟数不允许为负
+func normalizeIdleMinutes(v int) int {
+	if v < 0 {
+		return 0
+	}
+	return v
 }

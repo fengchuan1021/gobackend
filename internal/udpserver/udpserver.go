@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gobackend/config"
 	"gobackend/internal/database"
 	"gobackend/internal/model"
 
@@ -155,11 +154,12 @@ var (
 )
 
 type heartbeatJob struct {
-	uid      uint
-	serial   string
-	hasTask  uint32
-	scriptID uint
-	from     *net.UDPAddr
+	uid         uint
+	serial      string
+	hasTask     uint32
+	scriptID    uint
+	idleSeconds int
+	from        *net.UDPAddr
 }
 
 func parsePacket(buf []byte) (magic uint32, length uint32, cmdType uint32, messageID uint32, payload []byte, ok bool) {
@@ -315,10 +315,10 @@ func shouldRunCheckPlanTask(ctx context.Context, serial string) bool {
 
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
-func checkPlanTask(device *model.Device) {
-	if config.Cfg.IS_DEBUG {
-		return
-	}
+func checkPlanTask(device *model.Device, idleSeconds int) {
+	// if config.Cfg.IS_DEBUG {
+	// 	return
+	// }
 	if device == nil || device.ID == 0 {
 		fmt.Printf("checkPlanTask device is nil or id is 0\n")
 		return
@@ -392,7 +392,7 @@ func checkPlanTask(device *model.Device) {
 	var execRows []execRow
 	if err := database.DB.Model(&model.Task{}).
 		Select("script_id AS script_id, COALESCE(SUM(total_minutes), 0) AS executed_minutes").
-		Where("device_id = ? AND status!=4 AND created_at >= ?", device.ID, todayStart).
+		Where("device_id = ? AND status=2 AND created_at >= ?", device.ID, todayStart).
 		Group("script_id").
 		Scan(&execRows).Error; err != nil {
 		fmt.Printf("checkPlanTask get execRows failed err=%v\n", err)
@@ -408,6 +408,10 @@ func checkPlanTask(device *model.Device) {
 	for _, pt := range planTasks {
 		items := itemsByPlan[pt.ID]
 		if len(items) == 0 {
+			continue
+		}
+		// IdleMinutes 为 0 表示不限制；否则需空闲达到指定分钟数才触发
+		if pt.IdleMinutes > 0 && idleSeconds < pt.IdleMinutes*60 {
 			continue
 		}
 		if pt.ExecutionOrder == model.PlanTaskExecutionOrderRandom {
@@ -466,6 +470,7 @@ func checkPlanTask(device *model.Device) {
 			}
 			// 把刚刚入队的执行时长计入，避免同一脚本被本轮循环重复入队
 			executedByScript[item.ScriptID] = executed + duration
+			return
 		}
 	}
 }
@@ -506,7 +511,8 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 		if device.ExpireAt != nil && device.ExpireAt.Before(time.Now()) {
 			return
 		}
-		checkPlanTask(&device)
+		fmt.Printf("checkPlanTask idleSeconds=%d\n", job.idleSeconds)
+		checkPlanTask(&device, job.idleSeconds)
 		var newTask model.Task
 		now := time.Now()
 		if err := database.DB.Where(
@@ -611,19 +617,24 @@ func Run(port int) {
 			serial := serialAndUidAndScriptIdSplit[0]
 			uid, err := strconv.ParseUint(serialAndUidAndScriptIdSplit[1], 10, 32)
 			var scriptID uint64 = 0
-			if len(serialAndUidAndScriptIdSplit) == 3 {
+			if len(serialAndUidAndScriptIdSplit) >= 3 {
 				scriptID, err = strconv.ParseUint(serialAndUidAndScriptIdSplit[2], 10, 32)
+			}
+			idleSeconds := 0
+			if len(serialAndUidAndScriptIdSplit) >= 4 {
+				idleSeconds, err = strconv.Atoi(serialAndUidAndScriptIdSplit[3])
 			}
 
 			if err != nil {
 				continue
 			}
 			job := heartbeatJob{
-				uid:      uint(uid),
-				serial:   serial,
-				hasTask:  msgID,
-				scriptID: uint(scriptID),
-				from:     cloneUDPAddr(from),
+				uid:         uint(uid),
+				serial:      serial,
+				hasTask:     msgID,
+				scriptID:    uint(scriptID),
+				from:        cloneUDPAddr(from),
+				idleSeconds: idleSeconds,
 			}
 			heartbeatCh <- job
 		case CmdAck:

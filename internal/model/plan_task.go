@@ -15,6 +15,7 @@ type PlanTask struct {
 	UserID         uint      `gorm:"index;not null" json:"user_id"`
 	ExecutionOrder int       `gorm:"not null;default:1" json:"execution_order"` // 1顺序 2乱序
 	IsTimedTrigger bool      `gorm:"default:false" json:"is_timed_trigger"`
+	IdleMinutes    int       `gorm:"not null;default:0" json:"idle_minutes"` // 空闲超过多少分钟后触发，0 表示不限制
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
