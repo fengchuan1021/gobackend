@@ -70,6 +70,12 @@ func planTaskItemDedupeKey(deviceID, scriptID uint) string {
 	return fmt.Sprintf(planTaskItemDedupeKeyFmt, deviceID, scriptID)
 }
 
+const script_left_round = "device_script_left_round:%d_%d"
+
+func deviceScriptLeftRoundKey(deviceID, scriptID uint) string {
+	return fmt.Sprintf(script_left_round, deviceID, scriptID)
+}
+
 func maxDevicesPerIpCacheTTL(limit int) time.Duration {
 	if limit == 0 {
 		return 5 * time.Minute
@@ -380,7 +386,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 	// 2. 一次拉取所有相关条目，按 plan_task_id 归类
 	var allItems []model.PlanTaskItem
 	if err := database.DB.
-		Where("plan_task_id IN (?) and left_round>0", planTaskIDs).
+		Where("plan_task_id IN (?)", planTaskIDs).
 		Order("id ASC").
 		Find(&allItems).Error; err != nil {
 		fmt.Printf("checkPlanTask get allItems failed err=%v\n", err)
@@ -455,6 +461,26 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 					continue
 				}
 			}
+			leftRoundKey := deviceScriptLeftRoundKey(device.ID, item.ScriptID)
+			leftRound := 0
+			if database.RDB != nil {
+				ctx := context.Background()
+				val, err := database.RDB.Get(ctx, leftRoundKey).Int()
+				if err == redis.Nil {
+					leftRound = item.TotalRound
+					if err := database.RDB.Set(ctx, leftRoundKey, leftRound, 0).Err(); err != nil {
+						log.Printf("set device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+					}
+				} else if err != nil {
+					log.Printf("get device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+				} else {
+					leftRound = val
+				}
+				if leftRound <= 0 {
+					continue
+				}
+			}
+
 			dedupeKey := planTaskItemDedupeKey(device.ID, item.ScriptID)
 			if database.RDB != nil {
 				ok, err := database.RDB.SetNX(context.Background(), dedupeKey, "1", time.Duration(pt.IdleMinutes+1)*time.Minute).Result()
@@ -491,10 +517,8 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 				}
 				continue
 			}
-			if err := database.DB.Model(&model.PlanTaskItem{}).
-				Where("id = ?", item.ID).
-				Update("left_round", item.LeftRound-1).Error; err != nil {
-				log.Printf("decrement plan task item total_round failed item=%d err=%v", item.ID, err)
+			if database.RDB != nil {
+				_ = database.RDB.Set(context.Background(), leftRoundKey, leftRound-1, 0).Err()
 			}
 			// 把刚刚入队的执行时长计入，避免同一脚本被本轮循环重复入队
 			executedByScript[item.ScriptID] = executed + duration
