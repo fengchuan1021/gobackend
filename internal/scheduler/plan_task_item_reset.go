@@ -12,6 +12,7 @@ import (
 
 const planTaskItemResetHour = 0
 const planTaskItemResetMinute = 1
+const planTaskItemRedisBatchSize = 1000
 
 // nextPlanTaskItemResetTime 返回下一次每日重置时刻（本地时区 00:01）。
 func nextPlanTaskItemResetTime(now time.Time) time.Time {
@@ -58,7 +59,19 @@ func ResetPlanTaskItemLeftRounds() error {
 
 	ctx := context.Background()
 	pipe := database.RDB.Pipeline()
-	n := 0
+	batchCount := 0
+	totalCount := 0
+	flush := func() error {
+		if batchCount == 0 {
+			return nil
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
+			return err
+		}
+		pipe = database.RDB.Pipeline()
+		batchCount = 0
+		return nil
+	}
 	for _, dpt := range devicePlanTasks {
 		for _, item := range itemsByPlan[dpt.PlanTaskID] {
 			if item.ScriptID == 0 {
@@ -70,14 +83,23 @@ func ResetPlanTaskItemLeftRounds() error {
 			}
 			key := udpserver.DeviceScriptLeftRoundKey(dpt.DeviceID, item.ScriptID)
 			pipe.Set(ctx, key, totalRound, 0)
-			n++
+			batchCount++
+			totalCount++
+			if batchCount >= planTaskItemRedisBatchSize {
+				if err := flush(); err != nil {
+					return err
+				}
+			}
 		}
 	}
-	if n == 0 {
+	if totalCount == 0 {
 		return nil
 	}
-	_, err := pipe.Exec(ctx)
-	return err
+	if err := flush(); err != nil {
+		return err
+	}
+	log.Printf("plan task item left_round reset: %d keys", totalCount)
+	return nil
 }
 
 // StartPlanTaskItemLeftRoundResetLoop 每天 00:01 重置 PlanTaskItem 剩余轮次。
