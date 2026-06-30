@@ -680,10 +680,14 @@ func Run(port int) {
 			if err != nil {
 				continue
 			}
+			hasTask := uint32(0)
+			if scriptID > 0 {
+				hasTask = 1
+			}
 			job := heartbeatJob{
 				uid:         uint(uid),
 				serial:      serial,
-				hasTask:     msgID,
+				hasTask:     hasTask,
 				scriptID:    uint(scriptID),
 				from:        cloneUDPAddr(from),
 				idleSeconds: idleSeconds,
