@@ -653,7 +653,7 @@ func Run(port int) {
 			continue
 		}
 
-		_, _, cmdType, msgID, payload, ok := parsePacket(buf[:n])
+		_, _, cmdType, _, payload, ok := parsePacket(buf[:n])
 		if !ok {
 			continue
 		}
