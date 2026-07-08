@@ -94,6 +94,7 @@ func main() {
 		api.GET("/updateAppVersion", handler.UpdateAppVersion)
 		api.GET("/getAppVersion", handler.GetAppVersion)
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
+		api.GET("/go_models/*file_name", handler.GetGoModels)
 		api.GET("/ws", websocket.Handle(wsHub))
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.POST("/file/uploadFile", handler.UploadFile)

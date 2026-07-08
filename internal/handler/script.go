@@ -624,3 +624,67 @@ func AddScriptToCategory(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": s})
 }
+
+var goModelsBaseDir string
+
+func GetGoModels(c *gin.Context) {
+	fileName := strings.TrimPrefix(c.Param("file_name"), "/")
+	if fileName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if goModelsBaseDir == "" {
+		baseDir := "."
+		if config.Cfg != nil {
+			baseDir = config.Cfg.SOLUTION_DIR
+		}
+		goModelsBaseDir = filepath.Join(baseDir, "antares_assets", "models")
+	}
+
+	baseDir, err := filepath.Abs(goModelsBaseDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "配置错误"})
+		return
+	}
+
+	joined := filepath.Join(baseDir, fileName)
+	cleanPath := filepath.Clean(joined)
+	if !strings.HasPrefix(cleanPath, baseDir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "路径非法"})
+		return
+	}
+
+	lower := strings.ToLower(cleanPath)
+	if !strings.HasSuffix(lower, ".param") && !strings.HasSuffix(lower, ".bin") &&
+		!strings.HasSuffix(lower, ".yaml") && !strings.HasSuffix(lower, ".yml") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "仅支持 .param/.bin/.yaml 文件"})
+		return
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "文件不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+		return
+	}
+	if info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能是目录"})
+		return
+	}
+
+	content, err := os.ReadFile(cleanPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取模型失败"})
+		return
+	}
+
+	if strings.HasSuffix(lower, ".param") || strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml") {
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", content)
+		return
+	}
+	c.Data(http.StatusOK, "application/octet-stream", content)
+}
