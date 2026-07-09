@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"gobackend/internal/database"
+	"gobackend/internal/model"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,6 +34,21 @@ func clientIPFromRequest(c *gin.Context) string {
 		return ip
 	}
 	return c.ClientIP()
+}
+func getScriptLockSlot(ctx context.Context, scriptID uint, maxDevicesPerIp int, ip string, serial string, lockminutes int) int {
+	lockTTL := time.Duration(lockminutes) * time.Minute
+
+	for n := 1; n <= maxDevicesPerIp; n++ {
+		key := fmt.Sprintf("%s:%d:%d", ip, scriptID, n)
+		ok, err := database.RDB.SetNX(ctx, key, serial, lockTTL).Result()
+		if err != nil {
+			return 0
+		}
+		if ok {
+			return n
+		}
+	}
+	return 0
 }
 
 // GetIPLock 按 client_ip + package_name 占用一个并发槽位（Redis SET NX EX 2400）。
@@ -66,7 +83,13 @@ func GetIPLock(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	script := model.Script{}
+	if err := database.DB.Where("package_name = ?", packageName).First(&script).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "script not found"})
+		return
+	}
 	//uuid := newLockUUID()
+	//lock_slot := getScriptLockSlot(ctx, scriptID, maxDevicesPerIp, clientIP, req.Serial, lockminutes)
 	const lockTTL = 2400 * time.Second
 
 	for n := 1; n <= concurrency; n++ {

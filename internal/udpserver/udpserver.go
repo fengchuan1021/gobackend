@@ -327,10 +327,29 @@ func shouldRunCheckPlanTask(ctx context.Context, serial string) bool {
 	}
 	return ok
 }
+func ReleaseScriptLockSlot(ctx context.Context, scriptID uint, lockSlot int, serial string, ip string) {
+	key := fmt.Sprintf("%s:%d:%d", ip, scriptID, lockSlot)
+	database.RDB.Del(ctx, key)
+}
+func getScriptLockSlot(ctx context.Context, scriptID uint, maxDevicesPerIp int, ip string, serial string, lockminutes int) int {
+	lockTTL := time.Duration(lockminutes) * time.Minute
+
+	for n := 1; n <= maxDevicesPerIp; n++ {
+		key := fmt.Sprintf("%s:%d:%d", ip, scriptID, n)
+		ok, err := database.RDB.SetNX(ctx, key, serial, lockTTL).Result()
+		if err != nil {
+			return 0
+		}
+		if ok {
+			return n
+		}
+	}
+	return 0
+}
 
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
-func checkPlanTask(device *model.Device, idleSeconds int) {
+func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 	// if config.Cfg.IS_DEBUG {
 	// 	return
 	// }
@@ -340,19 +359,19 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 	}
 
 	// 已有未完成的任务排队/运行，跳过本次生成，避免重复堆积
-	var pendingCount int64
-	if err := database.DB.Model(&model.Task{}).
-		Where("device_id = ? AND status = ? ",
-			device.ID,
-			model.TaskStatusNotStarted,
-		).
-		Count(&pendingCount).Error; err != nil {
-		return
-	}
-	if pendingCount > 0 {
-		fmt.Printf("checkPlanTask pendingCount=%d\n", pendingCount)
-		return
-	}
+	// var pendingCount int64
+	// if err := database.DB.Model(&model.Task{}).
+	// 	Where("device_id = ? AND status = ? ",
+	// 		device.ID,
+	// 		model.TaskStatusNotStarted,
+	// 	).
+	// 	Count(&pendingCount).Error; err != nil {
+	// 	return
+	// }
+	// if pendingCount > 0 {
+	// 	fmt.Printf("checkPlanTask pendingCount=%d\n", pendingCount)
+	// 	return
+	// }
 
 	// 1. 该设备绑定的计划任务
 	var devicePlanTasks []model.DevicePlanTask
@@ -385,7 +404,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 
 	// 2. 一次拉取所有相关条目，按 plan_task_id 归类
 	var allItems []model.PlanTaskItem
-	if err := database.DB.
+	if err := database.DB.Preload("Script").
 		Where("plan_task_id IN (?)", planTaskIDs).
 		Order("id ASC").
 		Find(&allItems).Error; err != nil {
@@ -451,6 +470,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 			if executed >= required {
 				continue
 			}
+
 			if pt.IsTimedTrigger {
 				parsed, err := time.ParseInLocation("15:04", strings.TrimSpace(item.StartTime), now.Location())
 				if err != nil {
@@ -476,6 +496,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 				} else {
 					leftRound = val
 				}
+
 				if leftRound <= 0 {
 					continue
 				}
@@ -489,6 +510,17 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 				} else if !ok {
 					fmt.Printf("exists continue")
 					continue
+				}
+			}
+			lock_slot := 0
+			if item.Script.MaxDevicesPerIp > 0 {
+
+				if item.Script.MaxDevicesPerIp > 0 {
+					lock_slot = getScriptLockSlot(context.Background(), item.Script.ID, item.Script.MaxDevicesPerIp, ip, device.Serial, duration)
+					if lock_slot <= 0 {
+						continue
+					}
+
 				}
 			}
 			fmt.Printf("what a")
@@ -509,6 +541,7 @@ func checkPlanTask(device *model.Device, idleSeconds int) {
 				PlanTaskItemID: int(item.ID),
 				CreatedAt:      now,
 				UpdatedAt:      now,
+				LockSlot:       lock_slot,
 			}
 			if err := database.DB.Create(&task).Error; err != nil {
 				log.Printf("create plan task row failed device=%s script=%d err=%v", device.Serial, item.ScriptID, err)
@@ -564,7 +597,7 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 			return
 		}
 		fmt.Printf("checkPlanTask idleSeconds=%d\n", job.idleSeconds)
-		checkPlanTask(&device, job.idleSeconds)
+		checkPlanTask(&device, job.idleSeconds, job.from.IP.String())
 		var newTask model.Task
 		now := time.Now()
 		if err := database.DB.Where(

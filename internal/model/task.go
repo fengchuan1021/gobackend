@@ -36,10 +36,10 @@ type Task struct {
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 	OnHoldEndTime *time.Time `json:"on_hold_end_time"`
-
-	User   User   `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
-	Device Device `gorm:"foreignKey:DeviceID;constraint:-" json:"device,omitempty"`
-	Script Script `gorm:"foreignKey:ScriptID;constraint:-" json:"script,omitempty"`
+	LockSlot      int        `gorm:"default:0" json:"lock_slot"`
+	User          User       `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
+	Device        Device     `gorm:"foreignKey:DeviceID;constraint:-" json:"device,omitempty"`
+	Script        Script     `gorm:"foreignKey:ScriptID;constraint:-" json:"script,omitempty"`
 }
 
 // TableName 指定表名

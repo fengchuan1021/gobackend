@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"gobackend/config"
@@ -335,10 +334,10 @@ func ClientStopTask(c *gin.Context) {
 }
 
 type ClientFinishTaskReq struct {
-	TaskID      int    `json:"task_id" binding:"required"`
-	Status      int    `json:"status" binding:"required"`
-	Serial      string `json:"serial" binding:"required"`
-	IplockSlot  int    `json:"iplock_slot"`
+	TaskID int    `json:"task_id" binding:"required"`
+	Status int    `json:"status" binding:"required"`
+	Serial string `json:"serial" binding:"required"`
+
 	PackageName string `json:"package_name"`
 }
 
@@ -406,6 +405,10 @@ func ClientFinishTask(c *gin.Context) {
 		task.Status = model.TaskStatusAccountBan
 		database.DB.Save(&task)
 	}
+	if task.LockSlot > 0 {
+		clientIP := clientIPFromRequest(c)
+		udpserver.ReleaseScriptLockSlot(context.Background(), task.ScriptID, task.LockSlot, req.Serial, clientIP)
+	}
 	// var newTask model.Task
 	// if err := database.DB.Where("device_serial = ? and (status=0 or status=3 or status=1)", req.Serial).Order("left_round desc").First(&newTask).Error; err != nil {
 	// 	c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "task not found"})
@@ -416,11 +419,11 @@ func ClientFinishTask(c *gin.Context) {
 	// 	return
 	// }
 	// go udpserver.SendCommand(req.Serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), newTask.UserID)
-	if req.IplockSlot > 0 && strings.TrimSpace(req.PackageName) != "" {
-		clientIP := clientIPFromRequest(c)
-		key := fmt.Sprintf("%s:%s:%d", clientIP, strings.TrimSpace(req.PackageName), req.IplockSlot)
-		database.RDB.Del(context.Background(), key)
-	}
+	// if req.IplockSlot > 0 && strings.TrimSpace(req.PackageName) != "" {
+	// 	clientIP := clientIPFromRequest(c)
+	// 	key := fmt.Sprintf("%s:%s:%d", clientIP, strings.TrimSpace(req.PackageName), req.IplockSlot)
+	// 	database.RDB.Del(context.Background(), key)
+	// }
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
 

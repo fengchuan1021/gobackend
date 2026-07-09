@@ -38,6 +38,7 @@ type PlanTaskItem struct {
 	PackageName    string    `gorm:"type:varchar(255)" json:"package_name"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+	Script         Script    `gorm:"foreignKey:ScriptID;constraint:-" json:"script,omitempty"`
 }
 
 // TableName 指定表名
