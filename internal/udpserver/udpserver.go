@@ -518,6 +518,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				if item.Script.MaxDevicesPerIp > 0 {
 					lock_slot = getScriptLockSlot(context.Background(), item.Script.ID, item.Script.MaxDevicesPerIp, ip, device.Serial, duration)
 					if lock_slot <= 0 {
+						_ = database.RDB.Del(context.Background(), dedupeKey).Err()
 						continue
 					}
 
@@ -547,6 +548,9 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				log.Printf("create plan task row failed device=%s script=%d err=%v", device.Serial, item.ScriptID, err)
 				if database.RDB != nil {
 					_ = database.RDB.Del(context.Background(), dedupeKey).Err()
+					if lock_slot > 0 {
+						ReleaseScriptLockSlot(context.Background(), item.ScriptID, lock_slot, device.Serial, ip)
+					}
 				}
 				continue
 			}
