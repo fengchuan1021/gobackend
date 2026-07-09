@@ -133,6 +133,7 @@ func main() {
 		api.POST("/user/save_sleep_after_task", middleware.Auth, handler.SaveSleepAfterTask)
 		api.GET("/user/get_sleep_after_task", middleware.Auth, handler.GetSleepAfterTask)
 		api.POST("/user/get_user_config", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetUserConfig)
+		api.POST("/get_ip_lock", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetIPLock)
 		api.POST("/devices/reset_device/:serial", middleware.Auth, handler.ResetDeviceBySerial)
 		api.GET("/user/profile", middleware.Auth, handler.GetUserProfile)
 		api.POST("/user", middleware.Auth, handler.CreateUser)

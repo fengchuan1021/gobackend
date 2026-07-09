@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"gobackend/config"
@@ -333,9 +335,11 @@ func ClientStopTask(c *gin.Context) {
 }
 
 type ClientFinishTaskReq struct {
-	TaskID int    `json:"task_id" binding:"required"`
-	Status int    `json:"status" binding:"required"`
-	Serial string `json:"serial" binding:"required"`
+	TaskID      int    `json:"task_id" binding:"required"`
+	Status      int    `json:"status" binding:"required"`
+	Serial      string `json:"serial" binding:"required"`
+	IplockSlot  int    `json:"iplock_slot"`
+	PackageName string `json:"package_name"`
 }
 
 func ClientFinishTask(c *gin.Context) {
@@ -352,7 +356,15 @@ func ClientFinishTask(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	task.LeftRound--
+	if req.Status == model.TaskStatusOnHold {
+		task.Status = model.TaskStatusNotStarted
+		task.StartTime = nil
+		database.DB.Save(&task)
+	}
+	if req.Status != model.TaskStatusOnHold {
+		task.LeftRound--
+	}
+
 	if req.Status == model.TaskStatusCompleted {
 		if task.LeftRound > 0 {
 			clone := model.Task{
@@ -404,6 +416,11 @@ func ClientFinishTask(c *gin.Context) {
 	// 	return
 	// }
 	// go udpserver.SendCommand(req.Serial, udpserver.CmdRunTaskScript, []byte(strconv.Itoa(int(newTask.ID))), newTask.UserID)
+	if req.IplockSlot > 0 && strings.TrimSpace(req.PackageName) != "" {
+		clientIP := clientIPFromRequest(c)
+		key := fmt.Sprintf("%s:%s:%d", clientIP, strings.TrimSpace(req.PackageName), req.IplockSlot)
+		database.RDB.Del(context.Background(), key)
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
 
