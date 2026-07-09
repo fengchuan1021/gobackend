@@ -1,15 +1,11 @@
 package handler
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"gobackend/config"
 	"gobackend/internal/database"
@@ -143,48 +139,10 @@ func askDeepSeek(question string, answers []string) (int, error) {
 %s
 请只回复正确选项的序号（从0开始），不要回复其他任何内容。`, question, options.String())
 
-	body, err := json.Marshal(deepSeekChatRequest{
-		Model: "deepseek-v4-flash",
-		Messages: []deepSeekMessage{
-			{Role: "user", Content: prompt},
-		},
-		Temperature: 0,
-	})
+	content, err := callDeepSeekChat(config.Cfg.DeepSeek.APIKey, prompt, 0)
 	if err != nil {
-		return 0, fmt.Errorf("构建请求失败")
+		return 0, err
 	}
-
-	httpReq, err := http.NewRequest(http.MethodPost, "https://api.deepseek.com/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return 0, fmt.Errorf("创建请求失败")
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+config.Cfg.DeepSeek.APIKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return 0, fmt.Errorf("调用 DeepSeek 失败")
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("读取 DeepSeek 响应失败")
-	}
-
-	var chatResp deepSeekChatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return 0, fmt.Errorf("解析 DeepSeek 响应失败")
-	}
-	if chatResp.Error != nil {
-		return 0, fmt.Errorf("DeepSeek 错误: %s", chatResp.Error.Message)
-	}
-	if len(chatResp.Choices) == 0 {
-		return 0, fmt.Errorf("DeepSeek 未返回答案")
-	}
-
-	content := strings.TrimSpace(chatResp.Choices[0].Message.Content)
 	index, err := strconv.Atoi(content)
 	if err != nil {
 		for _, ch := range content {

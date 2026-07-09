@@ -34,7 +34,7 @@ func GetTaskDetail(c *gin.Context) {
 		return
 	}
 	var task model.Task
-	if err := database.DB.Preload("Script").Preload("Device").First(&task, req.TaskID).Error; err != nil {
+	if err := database.DB.Preload("Script").Preload("User").Preload("Device").First(&task, req.TaskID).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "task not found"})
 		return
 	}
@@ -94,6 +94,7 @@ func GetTaskDetail(c *gin.Context) {
 			"completed_count":   completedStats.TotalCount,
 			"package_name":      task.Script.PackageName,
 			"commonjsversion":   commonjs_version,
+			"apikey":            task.User.APIKey,
 			"scriptid":          fmt.Sprintf("%v", task.ScriptID),
 			"category_id":       fmt.Sprintf("%v", task.Script.CategoryID),
 			"plan_task_item_id": fmt.Sprintf("%v", task.PlanTaskItemID),

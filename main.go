@@ -96,6 +96,9 @@ func main() {
 		api.GET("/go_scripts/*file_name", handler.GetGoScripts)
 		api.GET("/go_models/*file_name", handler.GetGoModels)
 		api.GET("/ws", websocket.Handle(wsHub))
+
+		api.POST("/deepseek", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.DeepSeek)
+
 		api.GET("/scripts_tree", handler.GetScriptsTree)
 		api.POST("/file/uploadFile", handler.UploadFile)
 		api.GET("/scripts", middleware.Auth, handler.ListScripts)
