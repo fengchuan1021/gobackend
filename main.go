@@ -161,6 +161,7 @@ func main() {
 		api.POST("/task/clientGetScriptIdByExecureHistory", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientGetScriptIdByExecureHistory)
 		api.POST("/questionapp/answer", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.AnswerQuestion)
 		api.POST("/task/clientStopTask", middleware.Auth, handler.ClientStopTask)
+		api.POST("/task/clientPauseTask", middleware.Auth, handler.ClientPauseTask)
 		api.POST("/task/clientFinishTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientFinishTask)
 		api.POST("/task/executionStats", middleware.Auth, handler.GetTaskExecutionStats)
 		api.POST("/udp/cmdcallback", handler.CmdCallback)

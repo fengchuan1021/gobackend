@@ -41,6 +41,8 @@ const (
 	CmdStopTask         = 8
 	CmdBackupApps       = 9
 	CmdResetDevice      = 10
+	CmdReboot           = 11
+	CmdPauseTask        = 12
 )
 
 type ConnInfo struct {

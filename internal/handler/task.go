@@ -333,6 +333,27 @@ func ClientStopTask(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
 
+type ClientPauseTaskReq struct {
+	Serials []string `json:"serials" binding:"required"`
+}
+
+func ClientPauseTask(c *gin.Context) {
+	var req ClientPauseTaskReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serials is required"})
+		return
+	}
+	if len(req.Serials) == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "serials is empty"})
+		return
+	}
+
+	for _, serial := range req.Serials {
+		go udpserver.SendCommand(serial, udpserver.CmdPauseTask, []byte(""), 0)
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
+}
+
 type ClientFinishTaskReq struct {
 	TaskID int    `json:"task_id" binding:"required"`
 	Status int    `json:"status" binding:"required"`
