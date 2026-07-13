@@ -196,7 +196,7 @@ func GetAppVersion(c *gin.Context) {
 }
 func GetEssentialApps(c *gin.Context) {
 	var apps []model.Application
-	err := database.DB.Select("package_name", "download_url").Where("is_essential = 1").Find(&apps).Error
+	err := database.DB.Select("package_name", "download_url", "apk_version").Where("is_essential = 1").Find(&apps).Error
 	if err != nil {
 		fmt.Println("获取必备应用列表失败", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "获取失败"})
