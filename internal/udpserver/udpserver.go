@@ -395,6 +395,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 	var planTasks []model.PlanTask
 	if err := database.DB.
 		Where("id IN (?) AND user_id = ?", planTaskIDs, device.UserID).
+		Order("is_timed_trigger DESC").
 		Find(&planTasks).Error; err != nil {
 		fmt.Printf("checkPlanTask get planTasks failed err=%v\n", err)
 		return
