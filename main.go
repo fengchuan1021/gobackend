@@ -65,6 +65,7 @@ func main() {
 	log.Println("Redis 连接成功")
 
 	go scheduler.StartPlanTaskItemLeftRoundResetLoop(context.Background())
+	go scheduler.StartCleanupOldTasksLoop(context.Background())
 
 	gin.SetMode(config.Cfg.Server.Mode)
 	r := gin.Default()

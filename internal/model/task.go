@@ -33,7 +33,7 @@ type Task struct {
 	PlanTaskID     int        `gorm:"index;default:0" json:"plan_task_id"`
 	PlanTaskItemID int        `gorm:"index;default:0" json:"plan_task_item_id"`
 
-	CreatedAt     time.Time  `json:"created_at"`
+	CreatedAt     time.Time  `gorm:"index" json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 	OnHoldEndTime *time.Time `json:"on_hold_end_time"`
 	LockSlot      int        `gorm:"default:0" json:"lock_slot"`
