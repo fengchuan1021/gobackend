@@ -99,6 +99,7 @@ func GetTaskDetail(c *gin.Context) {
 			"scriptid":          fmt.Sprintf("%v", task.ScriptID),
 			"category_id":       fmt.Sprintf("%v", task.Script.CategoryID),
 			"plan_task_item_id": fmt.Sprintf("%v", task.PlanTaskItemID),
+			"TASK_TYPE":         task.TASK_TYPE,
 		},
 	})
 }

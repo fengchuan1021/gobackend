@@ -40,6 +40,7 @@ type Task struct {
 	User          User       `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
 	Device        Device     `gorm:"foreignKey:DeviceID;constraint:-" json:"device,omitempty"`
 	Script        Script     `gorm:"foreignKey:ScriptID;constraint:-" json:"script,omitempty"`
+	TASK_TYPE     string     `gorm:"type:varchar(32);default:''" json:"TASK_TYPE"`
 }
 
 // TableName 指定表名

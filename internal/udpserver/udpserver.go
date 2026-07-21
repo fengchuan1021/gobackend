@@ -472,8 +472,9 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			if executed >= required {
 				continue
 			}
-
+			task_type := ""
 			if pt.IsTimedTrigger {
+				task_type = "time_shot"
 				parsed, err := time.ParseInLocation("15:04", strings.TrimSpace(item.StartTime), now.Location())
 				if err != nil {
 					continue
@@ -545,6 +546,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				CreatedAt:      now,
 				UpdatedAt:      now,
 				LockSlot:       lock_slot,
+				TASK_TYPE:      task_type,
 			}
 			if err := database.DB.Create(&task).Error; err != nil {
 				log.Printf("create plan task row failed device=%s script=%d err=%v", device.Serial, item.ScriptID, err)
