@@ -467,10 +467,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			if round <= 0 {
 				round = 1
 			}
-			required := round * duration
-			executed := executedByScript[item.ScriptID]
-			if executed >= required {
-				continue
+			if !pt.IsTimedTrigger {
+				required := round * duration
+				executed := executedByScript[item.ScriptID]
+				if executed >= required {
+					continue
+				}
 			}
 			task_type := ""
 			if pt.IsTimedTrigger {
