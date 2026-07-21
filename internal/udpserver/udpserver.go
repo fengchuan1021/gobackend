@@ -423,12 +423,13 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	type execRow struct {
-		ScriptID        uint
-		ExecutedMinutes int
+		ScriptID                   uint
+		ExecutedMinutes            int
+		TimerTrigedExecutedMinutes int
 	}
 	var execRows []execRow
 	if err := database.DB.Model(&model.Task{}).
-		Select("script_id AS script_id, COALESCE(SUM(total_minutes), 0) AS executed_minutes").
+		Select("script_id AS script_id, COALESCE(SUM(total_minutes), 0) AS executed_minutes, COALESCE(SUM(CASE WHEN TASK_TYPE = 'time_shot' THEN total_minutes ELSE 0 END), 0) AS timer_triged_executed_minutes").
 		Where("device_id = ? AND status=2 AND created_at >= ?", device.ID, todayStart).
 		Group("script_id").
 		Scan(&execRows).Error; err != nil {
@@ -437,8 +438,10 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 	}
 
 	executedByScript := make(map[uint]int, len(execRows))
+	timerTrigedExecutedByScript := make(map[uint]int, len(execRows))
 	for _, r := range execRows {
 		executedByScript[r.ScriptID] = r.ExecutedMinutes
+		timerTrigedExecutedByScript[r.ScriptID] = r.TimerTrigedExecutedMinutes
 	}
 
 	// 4. 遍历每个计划任务及其条目，按需创建 Task 行
@@ -471,8 +474,14 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 
 			required := round * duration
 			executed := executedByScript[item.ScriptID]
-			if !pt.IsTimedTrigger && executed >= required {
-				continue
+			if pt.IsTimedTrigger {
+				if timerTrigedExecutedByScript[item.ScriptID] >= required {
+					continue
+				}
+			} else {
+				if executed >= required {
+					continue
+				}
 			}
 
 			task_type := ""
