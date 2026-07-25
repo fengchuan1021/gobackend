@@ -55,6 +55,7 @@ func main() {
 		&model.PlanTaskItem{},
 		&model.DevicePlanTask{},
 		&model.QuestionAnswer{},
+		&model.CrontabTask{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -156,6 +157,11 @@ func main() {
 		api.POST("/plan_tasks/delete", middleware.Auth, handler.DeletePlanTask)
 		api.POST("/plan_tasks/setDevices", middleware.Auth, handler.SetPlanTaskDevices)
 		api.POST("/plan_tasks/setItems", middleware.Auth, handler.SetPlanTaskItems)
+		api.POST("/crontabtasks/listCrontabTasks", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ListCrontabTasks)
+		api.POST("/crontabtasks/list", middleware.Auth, handler.ListCrontabTasksAdmin)
+		api.POST("/crontabtasks/create", middleware.Auth, handler.CreateCrontabTask)
+		api.POST("/crontabtasks/update", middleware.Auth, handler.UpdateCrontabTask)
+		api.POST("/crontabtasks/delete", middleware.Auth, handler.DeleteCrontabTask)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
 		api.POST("/task/clientAddSubTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientAddSubTask)
