@@ -23,15 +23,85 @@ import (
 )
 
 // GetTaskDetailReq 获取任务详情请求
+// ScriptID / DeviceSerial 可选；validator 无 optional 标签，留空即可
 type GetTaskDetailReq struct {
-	TaskID int `json:"task_id" binding:"required"`
+	TaskID       int    `json:"task_id"`
+	ScriptID     int    `json:"script_id"`
+	DeviceSerial string `json:"device_serial"`
+}
+
+func GetTaskDetailByScriptID(c *gin.Context, scriptID int, deviceSerial string) {
+	if deviceSerial == "" {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "device serial is required"})
+		return
+	}
+	var device model.Device
+	if err := database.DB.Where("serial = ?", deviceSerial).First(&device).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "device not found"})
+		return
+	}
+	if device.ExpireAt == nil || device.ExpireAt.Before(time.Now()) {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "device expired"})
+		return
+	}
+	var script model.Script
+	if err := database.DB.Where("id = ?", scriptID).First(&script).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "script not found"})
+		return
+	}
+	file_path := script.FilePath
+	BASE_DIR := config.Cfg.SOLUTION_DIR + "/antares_assets"
+	full_path := filepath.Join(BASE_DIR, file_path)
+	content, err := os.ReadFile(full_path)
+	fmt.Println("content", string(content))
+	if err != nil {
+		fmt.Println("read file failed", err)
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "read file failed"})
+		return
+	}
+	scriptEncoded := base21.EncodeToString(content)
+	commonjs_path := config.Cfg.SOLUTION_DIR + "/antares_assets/common.js"
+	commonjs_info, err := os.Stat(commonjs_path)
+	var commonjs_version int64 = 1
+	if err == nil {
+		commonjs_version = commonjs_info.ModTime().Unix()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "ok",
+		"data": gin.H{
+			"script":            scriptEncoded,
+			"args":              "{}",
+			"total_minutes":     60,
+			"completed_minutes": 0,
+			"completed_count":   0,
+			"package_name":      script.PackageName,
+			"commonjsversion":   commonjs_version,
+			"apikey":            "",
+			"scriptid":          fmt.Sprintf("%v", script.ID),
+			"category_id":       fmt.Sprintf("%v", script.CategoryID),
+			"plan_task_item_id": fmt.Sprintf("%v", 0),
+			"TASK_TYPE":         "crontab",
+		},
+	})
+
 }
 
 // GetTaskDetail 获取任务详情（含脚本内容），供设备端执行脚本；请求体由 AesRequest 中间件解密后为 {"task_id": ...}
 func GetTaskDetail(c *gin.Context) {
 	var req GetTaskDetailReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "task_id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid request"})
+		return
+	}
+	if req.ScriptID <= 0 && req.TaskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "task_id or script_id is required"})
+		return
+	}
+	if req.ScriptID > 0 {
+
+		GetTaskDetailByScriptID(c, req.ScriptID, req.DeviceSerial)
 		return
 	}
 	var task model.Task
@@ -99,7 +169,7 @@ func GetTaskDetail(c *gin.Context) {
 			"scriptid":          fmt.Sprintf("%v", task.ScriptID),
 			"category_id":       fmt.Sprintf("%v", task.Script.CategoryID),
 			"plan_task_item_id": fmt.Sprintf("%v", task.PlanTaskItemID),
-			"TASK_TYPE":         task.TASK_TYPE,
+			"TASK_TYPE":         "",
 		},
 	})
 }
