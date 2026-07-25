@@ -65,7 +65,7 @@ func ListCrontabTasks(c *gin.Context) {
 	out := make([]crontabTaskClientItem, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, crontabTaskClientItem{
-			TimeRange: []int{r.TimeRangeStart, r.TimeRangeEnd},
+			TimeRange: r.TimeRangeMinutes(),
 			TaskID:    r.TaskID,
 		})
 	}
@@ -119,8 +119,8 @@ func CreateCrontabTask(c *gin.Context) {
 		UserID:         uid,
 		Name:           req.Name,
 		TaskID:         req.TaskID,
-		TimeRangeStart: start,
-		TimeRangeEnd:   end,
+		TimeRangeStart: model.TimeFromMinutes(start),
+		TimeRangeEnd:   model.TimeFromMinutes(end),
 		Enabled:        enabled,
 	}
 	if err := database.DB.Create(&row).Error; err != nil {
@@ -158,8 +158,8 @@ func UpdateCrontabTask(c *gin.Context) {
 	}
 	row.Name = req.Name
 	row.TaskID = req.TaskID
-	row.TimeRangeStart = start
-	row.TimeRangeEnd = end
+	row.TimeRangeStart = model.TimeFromMinutes(start)
+	row.TimeRangeEnd = model.TimeFromMinutes(end)
 	if req.Enabled != nil {
 		row.Enabled = *req.Enabled
 	}
