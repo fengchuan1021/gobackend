@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"net"
 	"strconv"
@@ -235,7 +234,7 @@ func registerHeartbeatClient(job *heartbeatJob) {
 	fmt.Printf("registerHeartbeatClient serial=%s ip=%s\n", job.serial, job.from.IP.String())
 	ctx := context.Background()
 	if err := database.RDB.Set(ctx, OnlineDevicePrefix+job.serial, job.from.IP.String(), clientStaleTimeout).Err(); err != nil {
-		log.Printf("set online device ttl failed serial=%s err=%v", job.serial, err)
+		fmt.Printf("set online device ttl failed serial=%s err=%v", job.serial, err)
 	}
 	clientsMu.Lock()
 	if ci, ok := clients[job.serial]; ok {
@@ -284,7 +283,7 @@ func UpdateMaxDevicesPerIp(userID uint, limit int) {
 	cacheKey := fmt.Sprintf(maxDevicesPerIPCacheKeyFmt, userID)
 	database.RDB.Set(ctx, cacheKey, strconv.Itoa(limit), maxDevicesPerIpCacheTTL(limit))
 	if err := database.RDB.Set(ctx, cacheKey, strconv.Itoa(limit), maxDevicesPerIpCacheTTL(limit)).Err(); err != nil {
-		log.Printf("set max devices per ip failed userID=%d limit=%d err=%v", userID, limit, err)
+		fmt.Printf("set max devices per ip failed userID=%d limit=%d err=%v", userID, limit, err)
 	}
 
 }
@@ -449,10 +448,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 	for _, pt := range planTasks {
 		items := itemsByPlan[pt.ID]
 		if len(items) == 0 {
+			fmt.Printf("checkPlanTask items is empty planTask.ID=%d\n", pt.ID)
 			continue
 		}
 		// IdleMinutes 为 0 表示不限制；否则需空闲达到指定分钟数才触发
 		if pt.IdleMinutes > 0 && idleSeconds < pt.IdleMinutes*60 {
+			fmt.Printf("checkPlanTask idleSeconds < planTask.IdleMinutes*60 idleSeconds=%d planTask.IdleMinutes=%d\n", idleSeconds, pt.IdleMinutes)
 			continue
 		}
 		if pt.ExecutionOrder == model.PlanTaskExecutionOrderRandom {
@@ -462,10 +463,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 		}
 		for _, item := range items {
 			if item.ScriptID == 0 {
+				fmt.Printf("checkPlanTask item.ScriptID is 0 planTask.ID=%d\n", pt.ID)
 				continue
 			}
 			duration := item.DurationMinute
 			if duration <= 0 {
+				fmt.Printf("checkPlanTask duration <= 0 duration=%d planTask.ID=%d\n", duration, pt.ID)
 				duration = 40
 			}
 			round := item.TotalRound
@@ -477,10 +480,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			executed := executedByScript[item.ScriptID]
 			if pt.IsTimedTrigger {
 				if timerTrigedExecutedByScript[item.ScriptID] >= required {
+					fmt.Printf("checkPlanTask timerTrigedExecutedByScript >= required timerTrigedExecutedByScript=%d required=%d planTask.ID=%d\n", timerTrigedExecutedByScript[item.ScriptID], required, pt.ID)
 					continue
 				}
 			} else {
 				if executed >= required {
+					fmt.Printf("checkPlanTask executed >= required executed=%d required=%d planTask.ID=%d\n", executed, required, pt.ID)
 					continue
 				}
 			}
@@ -490,10 +495,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				task_type = "time_shot"
 				parsed, err := time.ParseInLocation("15:04", strings.TrimSpace(item.StartTime), now.Location())
 				if err != nil {
+					fmt.Printf("checkPlanTask parse start time failed err=%v planTask.ID=%d\n", err, pt.ID)
 					continue
 				}
 				startMoment := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
 				if now.Before(startMoment) {
+					fmt.Printf("checkPlanTask now.Before(startMoment) now=%s startMoment=%s planTask.ID=%d\n", now, startMoment, pt.ID)
 					continue
 				}
 			}
@@ -505,15 +512,16 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				if err == redis.Nil {
 					leftRound = item.TotalRound
 					if err := database.RDB.Set(ctx, leftRoundKey, leftRound, 0).Err(); err != nil {
-						log.Printf("set device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+						fmt.Printf("set device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
 					}
 				} else if err != nil {
-					log.Printf("get device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+					fmt.Printf("get device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
 				} else {
 					leftRound = val
 				}
 
 				if leftRound <= 0 {
+					fmt.Printf("checkPlanTask leftRound <= 0 leftRound=%d planTask.ID=%d\n", leftRound, pt.ID)
 					continue
 				}
 			}
@@ -522,7 +530,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			if database.RDB != nil {
 				ok, err := database.RDB.SetNX(context.Background(), dedupeKey, "1", time.Duration(pt.IdleMinutes+1)*time.Minute).Result()
 				if err != nil {
-					log.Printf("set plan task dedupe key failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+					fmt.Printf("set plan task dedupe key failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
 				} else if !ok {
 					fmt.Printf("exists continue")
 					continue
@@ -562,7 +570,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				TASK_TYPE:      task_type,
 			}
 			if err := database.DB.Create(&task).Error; err != nil {
-				log.Printf("create plan task row failed device=%s script=%d err=%v", device.Serial, item.ScriptID, err)
+				fmt.Printf("create plan task row failed device=%s script=%d err=%v", device.Serial, item.ScriptID, err)
 				if database.RDB != nil {
 					_ = database.RDB.Del(context.Background(), dedupeKey).Err()
 					if lock_slot > 0 {
@@ -587,12 +595,12 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 	ctx := context.Background()
 	if job.hasTask != 0 {
 		if err := upsertRunningDeviceInRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
-			log.Printf("upsert running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
+			fmt.Printf("upsert running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
 		}
 		return
 	} else {
 		// if err := removeRunningDeviceFromRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
-		// 	log.Printf("remove running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
+		// 	fmt.Printf("remove running device failed uid=%d serial=%s ip=%s err=%v", job.uid, job.serial, job.from.IP.String(), err)
 		// }
 	}
 
@@ -600,7 +608,7 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 	if n > 0 {
 		count, err := RunningTaskDeviceCount(ctx, job.uid, job.from.IP.String())
 		if err != nil {
-			log.Printf("get running task device count failed uid=%d ip=%s err=%v", job.uid, job.from.IP.String(), err)
+			fmt.Printf("get running task device count failed uid=%d ip=%s err=%v", job.uid, job.from.IP.String(), err)
 		}
 		if count >= int64(n) {
 			fmt.Printf("maybeRunPendingTaskFromHeartbeat count>=n count=%d n=%d\n", count, n)
@@ -640,7 +648,7 @@ func handleHeartbeatJob(c *net.UDPConn, job heartbeatJob) {
 	registerHeartbeatClient(&job)
 	maybeRunPendingTaskFromHeartbeat(&job)
 	if _, err := c.WriteToUDP(heartbeatAckPacket, job.from); err != nil {
-		log.Printf("UDP heartbeat reply failed: %v", err)
+		fmt.Printf("UDP heartbeat reply failed: %v", err)
 	}
 }
 
@@ -670,12 +678,12 @@ func stopHeartbeatWorkers() {
 func Run(port int) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		log.Printf("UDP resolve failed: %v", err)
+		fmt.Printf("UDP resolve failed: %v", err)
 		return
 	}
 	c, err := net.ListenUDP("udp", addr)
 	if err != nil {
-		log.Printf("UDP listen failed: %v", err)
+		fmt.Printf("UDP listen failed: %v", err)
 		return
 	}
 	defer c.Close()
@@ -696,13 +704,13 @@ func Run(port int) {
 	defer cancel()
 	go staleClientCleanupLoop(ctx)
 
-	log.Printf("UDP server listening on :%d", port)
+	fmt.Printf("UDP server listening on :%d", port)
 
 	buf := make([]byte, 65536)
 	for {
 		n, from, err := c.ReadFromUDP(buf)
 		if err != nil {
-			log.Printf("UDP read error: %v", err)
+			fmt.Printf("UDP read error: %v", err)
 			continue
 		}
 		if n < HeaderSize {
