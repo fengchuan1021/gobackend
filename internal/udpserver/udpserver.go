@@ -352,6 +352,7 @@ func getScriptLockSlot(ctx context.Context, scriptID uint, maxDevicesPerIp int, 
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
 func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
+	fmt.Printf("checkPlanTask device.Serial=%s idleSeconds=%d ip=%s\n", device.Serial, idleSeconds, ip)
 	// if config.Cfg.IS_DEBUG {
 	// 	return
 	// }
@@ -582,6 +583,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 
 // maybeRunPendingTaskFromHeartbeat 在设备空闲心跳时检查是否有待运行任务并下发
 func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
+	fmt.Printf("maybeRunPendingTaskFromHeartbeat job.serial=%s job.hasTask=%d\n", job.serial, job.hasTask)
 	ctx := context.Background()
 	if job.hasTask != 0 {
 		if err := upsertRunningDeviceInRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
@@ -601,6 +603,7 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 			log.Printf("get running task device count failed uid=%d ip=%s err=%v", job.uid, job.from.IP.String(), err)
 		}
 		if count >= int64(n) {
+			fmt.Printf("maybeRunPendingTaskFromHeartbeat count>=n count=%d n=%d\n", count, n)
 			return
 		}
 	}
@@ -610,13 +613,14 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 		var device model.Device
 		if err := database.DB.Where("serial = ?", job.serial).First(&device).Error; err != nil {
 
-			log.Printf("get device failed serial=%s err=%v", job.serial, err)
+			fmt.Printf("get device failed serial=%s err=%v", job.serial, err)
 			return
 		}
 		if device.ExpireAt != nil && device.ExpireAt.Before(time.Now()) {
+			fmt.Printf("device expired serial=%s\n", job.serial)
 			return
 		}
-		fmt.Printf("checkPlanTask idleSeconds=%d\n", job.idleSeconds)
+		fmt.Printf("checkPlanTask Job.serial=%s idleSeconds=%d\n", job.serial, job.idleSeconds)
 		checkPlanTask(&device, job.idleSeconds, job.from.IP.String())
 		var newTask model.Task
 
