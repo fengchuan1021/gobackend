@@ -56,6 +56,7 @@ func main() {
 		&model.DevicePlanTask{},
 		&model.QuestionAnswer{},
 		&model.CrontabTask{},
+		&model.DeviceUserProfile{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -163,6 +164,7 @@ func main() {
 		api.POST("/crontabtasks/update", middleware.Auth, handler.UpdateCrontabTask)
 		api.POST("/crontabtasks/delete", middleware.Auth, handler.DeleteCrontabTask)
 		api.POST("/task/getTaskDetail", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTaskDetail)
+		api.POST("/device/syncUsers", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.SyncUsers)
 		api.POST("/task/clientAddTask", middleware.Auth, handler.ClientAddTask)
 		api.POST("/task/clientAddSubTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientAddSubTask)
 		api.POST("/task/clientGetScriptIdByExecureHistory", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientGetScriptIdByExecureHistory)

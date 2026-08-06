@@ -32,15 +32,15 @@ type Task struct {
 	Status         int        `gorm:"index;default:0" json:"status"` // 0未开始 1执行中 2正常结束 3异常结束
 	PlanTaskID     int        `gorm:"index;default:0" json:"plan_task_id"`
 	PlanTaskItemID int        `gorm:"index;default:0" json:"plan_task_item_id"`
-
-	CreatedAt     time.Time  `gorm:"index" json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	OnHoldEndTime *time.Time `json:"on_hold_end_time"`
-	LockSlot      int        `gorm:"default:0" json:"lock_slot"`
-	User          User       `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
-	Device        Device     `gorm:"foreignKey:DeviceID;constraint:-" json:"device,omitempty"`
-	Script        Script     `gorm:"foreignKey:ScriptID;constraint:-" json:"script,omitempty"`
-	TASK_TYPE     string     `gorm:"type:varchar(32);default:''" json:"TASK_TYPE"`
+	DeviceUserID   uint       `gorm:"index;default:0" json:"device_user_id"`
+	CreatedAt      time.Time  `gorm:"index" json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	OnHoldEndTime  *time.Time `json:"on_hold_end_time"`
+	LockSlot       int        `gorm:"default:0" json:"lock_slot"`
+	User           User       `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
+	Device         Device     `gorm:"foreignKey:DeviceID;constraint:-" json:"device,omitempty"`
+	Script         Script     `gorm:"foreignKey:ScriptID;constraint:-" json:"script,omitempty"`
+	TASK_TYPE      string     `gorm:"type:varchar(32);default:''" json:"TASK_TYPE"`
 }
 
 // TableName 指定表名

@@ -720,3 +720,52 @@ func UpdateDeviceMeta(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "更新成功"})
 }
+func SyncUsers(c *gin.Context) {
+	var req struct {
+		Users []struct {
+			UserID uint   `json:"id"`
+			Name   string `json:"name"`
+		} `json:"users"`
+		DeviceSerial string `json:"device_serial"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	if strings.TrimSpace(req.DeviceSerial) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "缺少 device_serial"})
+		return
+	}
+	var device model.Device
+	if err := database.DB.Where("serial = ?", req.DeviceSerial).First(&device).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "设备不存在"})
+		return
+	}
+
+	tx := database.DB.Begin()
+	if err := tx.Where("device_serial = ?", req.DeviceSerial).Delete(&model.DeviceUserProfile{}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "同步失败"})
+		return
+	}
+	if len(req.Users) > 0 {
+		profiles := make([]model.DeviceUserProfile, 0, len(req.Users))
+		for _, u := range req.Users {
+			profiles = append(profiles, model.DeviceUserProfile{
+				DeviceSerial: req.DeviceSerial,
+				UserID:       u.UserID,
+				Name:         u.Name,
+			})
+		}
+		if err := tx.Create(&profiles).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "同步失败"})
+			return
+		}
+	}
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "同步失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "同步成功"})
+}
