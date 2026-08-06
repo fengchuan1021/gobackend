@@ -462,13 +462,14 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			})
 		}
 		for _, item := range items {
+			fmt.Printf("checkPlanTask item.ID=%d item.ScriptID=%d job.serial=%s\n", item.ID, item.ScriptID, device.Serial)
 			if item.ScriptID == 0 {
-				fmt.Printf("checkPlanTask item.ScriptID is 0 planTask.ID=%d\n", pt.ID)
+				fmt.Printf("checkPlanTask item.ScriptID is 0 planTask.ID=%d plantaskitem.ID=%d\n", pt.ID, item.ID)
 				continue
 			}
 			duration := item.DurationMinute
 			if duration <= 0 {
-				fmt.Printf("checkPlanTask duration <= 0 duration=%d planTask.ID=%d\n", duration, pt.ID)
+				fmt.Printf("checkPlanTask duration <= 0 duration=%d planTask.ID=%d plantaskitem.ID=%d\n", duration, pt.ID, item.ID)
 				duration = 40
 			}
 			round := item.TotalRound
@@ -480,7 +481,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			executed := executedByScript[item.ScriptID]
 			if pt.IsTimedTrigger {
 				if timerTrigedExecutedByScript[item.ScriptID] >= required {
-					fmt.Printf("checkPlanTask timerTrigedExecutedByScript >= required timerTrigedExecutedByScript=%d required=%d planTask.ID=%d\n", timerTrigedExecutedByScript[item.ScriptID], required, pt.ID)
+					fmt.Printf("checkPlanTask timerTrigedExecutedByScript >= required timerTrigedExecutedByScript=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", timerTrigedExecutedByScript[item.ScriptID], required, pt.ID, item.ID)
 					continue
 				}
 			} else {
@@ -495,12 +496,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				task_type = "time_shot"
 				parsed, err := time.ParseInLocation("15:04", strings.TrimSpace(item.StartTime), now.Location())
 				if err != nil {
-					fmt.Printf("checkPlanTask parse start time failed err=%v planTask.ID=%d\n", err, pt.ID)
+					fmt.Printf("checkPlanTask parse start time failed err=%v planTask.ID=%d plantaskitem.ID=%d\n", err, pt.ID, item.ID)
 					continue
 				}
 				startMoment := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
 				if now.Before(startMoment) {
-					fmt.Printf("checkPlanTask now.Before(startMoment) now=%s startMoment=%s planTask.ID=%d\n", now, startMoment, pt.ID)
+					fmt.Printf("checkPlanTask now.Before(startMoment) now=%s startMoment=%s planTask.ID=%d plantaskitem.ID=%d\n", now, startMoment, pt.ID, item.ID)
 					continue
 				}
 			}
@@ -521,7 +522,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				}
 
 				if leftRound <= 0 {
-					fmt.Printf("checkPlanTask leftRound <= 0 leftRound=%d planTask.ID=%d\n", leftRound, pt.ID)
+					fmt.Printf("checkPlanTask leftRound <= 0 leftRound=%d planTask.ID=%d plantaskitem.ID=%d\n", leftRound, pt.ID, item.ID)
 					continue
 				}
 			}
