@@ -169,6 +169,7 @@ func GetTaskDetail(c *gin.Context) {
 			"scriptid":          fmt.Sprintf("%v", task.ScriptID),
 			"category_id":       fmt.Sprintf("%v", task.Script.CategoryID),
 			"plan_task_item_id": fmt.Sprintf("%v", task.PlanTaskItemID),
+			"device_user_id":    fmt.Sprintf("%v", task.DeviceUserID),
 			"TASK_TYPE":         "",
 		},
 	})
@@ -426,11 +427,11 @@ func ClientPauseTask(c *gin.Context) {
 }
 
 type ClientFinishTaskReq struct {
-	TaskID int    `json:"task_id" binding:"required"`
-	Status int    `json:"status" binding:"required"`
-	Serial string `json:"serial" binding:"required"`
-
-	PackageName string `json:"package_name"`
+	TaskID       int    `json:"task_id" binding:"required"`
+	Status       int    `json:"status" binding:"required"`
+	Serial       string `json:"serial" binding:"required"`
+	DeviceUserID string `json:"device_user_id"`
+	PackageName  string `json:"package_name"`
 }
 
 func ClientFinishTask(c *gin.Context) {
@@ -457,6 +458,7 @@ func ClientFinishTask(c *gin.Context) {
 	}
 
 	if req.Status == model.TaskStatusCompleted {
+		udpserver.UpdateLastDeviceUserIdEndTaskTime(context.Background(), req.Serial, req.DeviceUserID)
 		if task.LeftRound > 0 {
 			clone := model.Task{
 				UserID:       task.UserID,

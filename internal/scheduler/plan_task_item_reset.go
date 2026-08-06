@@ -83,7 +83,7 @@ func ensurePlanTaskLeftRoundResetToday(ctx context.Context) error {
 }
 
 // ResetPlanTaskItemLeftRounds 按 DevicePlanTask 关联关系，将 Redis 中
-// device_script_left_round:{deviceID}_{scriptID} 重置为对应 PlanTaskItem 的 total_round。
+// device_script_left_round:{deviceID}_{scriptID}_{deviceUserID} 重置为对应 PlanTaskItem 的 total_round。
 func ResetPlanTaskItemLeftRounds() error {
 	if database.RDB == nil {
 		return nil
@@ -98,12 +98,20 @@ func ResetPlanTaskItemLeftRounds() error {
 	}
 
 	planTaskIDSet := make(map[uint]struct{}, len(devicePlanTasks))
+	serialSet := make(map[string]struct{}, len(devicePlanTasks))
 	for _, dpt := range devicePlanTasks {
 		planTaskIDSet[dpt.PlanTaskID] = struct{}{}
+		if dpt.Serial != "" {
+			serialSet[dpt.Serial] = struct{}{}
+		}
 	}
 	planTaskIDs := make([]uint, 0, len(planTaskIDSet))
 	for id := range planTaskIDSet {
 		planTaskIDs = append(planTaskIDs, id)
+	}
+	serials := make([]string, 0, len(serialSet))
+	for s := range serialSet {
+		serials = append(serials, s)
 	}
 
 	var items []model.PlanTaskItem
@@ -113,6 +121,17 @@ func ResetPlanTaskItemLeftRounds() error {
 	itemsByPlan := make(map[uint][]model.PlanTaskItem, len(planTaskIDs))
 	for _, item := range items {
 		itemsByPlan[item.PlanTaskID] = append(itemsByPlan[item.PlanTaskID], item)
+	}
+
+	profilesBySerial := make(map[string][]uint, len(serials))
+	if len(serials) > 0 {
+		var profiles []model.DeviceUserProfile
+		if err := database.DB.Where("device_serial IN ?", serials).Find(&profiles).Error; err != nil {
+			return err
+		}
+		for _, p := range profiles {
+			profilesBySerial[p.DeviceSerial] = append(profilesBySerial[p.DeviceSerial], p.UserID)
+		}
 	}
 
 	ctx := context.Background()
@@ -131,6 +150,10 @@ func ResetPlanTaskItemLeftRounds() error {
 		return nil
 	}
 	for _, dpt := range devicePlanTasks {
+		deviceUserIDs := profilesBySerial[dpt.Serial]
+		if len(deviceUserIDs) == 0 {
+			deviceUserIDs = []uint{0}
+		}
 		for _, item := range itemsByPlan[dpt.PlanTaskID] {
 			if item.ScriptID == 0 {
 				continue
@@ -139,13 +162,15 @@ func ResetPlanTaskItemLeftRounds() error {
 			if totalRound <= 0 {
 				totalRound = 1
 			}
-			key := udpserver.DeviceScriptLeftRoundKey(dpt.DeviceID, item.ScriptID)
-			pipe.Set(ctx, key, totalRound, 0)
-			batchCount++
-			totalCount++
-			if batchCount >= planTaskItemRedisBatchSize {
-				if err := flush(); err != nil {
-					return err
+			for _, deviceUserID := range deviceUserIDs {
+				key := udpserver.DeviceScriptLeftRoundKey(dpt.DeviceID, item.ScriptID, deviceUserID)
+				pipe.Set(ctx, key, totalRound, 0)
+				batchCount++
+				totalCount++
+				if batchCount >= planTaskItemRedisBatchSize {
+					if err := flush(); err != nil {
+						return err
+					}
 				}
 			}
 		}

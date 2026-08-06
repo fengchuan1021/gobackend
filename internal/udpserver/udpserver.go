@@ -65,16 +65,65 @@ const planTaskCheckTTL = 20 * time.Second
 // planTaskItemDedupeTTL 同一设备同一脚本计划任务入队的最小间隔
 const planTaskItemDedupeTTL = 30 * time.Minute
 
-const planTaskItemDedupeKeyFmt = "udpserver:plantask:dedupe:%d_%d"
+const planTaskItemDedupeKeyFmt = "udpserver:plantask:dedupe:%d_%d_%d"
 
-func planTaskItemDedupeKey(deviceID, scriptID uint) string {
-	return fmt.Sprintf(planTaskItemDedupeKeyFmt, deviceID, scriptID)
+func planTaskItemDedupeKey(deviceID, scriptID, deviceUserID uint) string {
+	return fmt.Sprintf(planTaskItemDedupeKeyFmt, deviceID, scriptID, deviceUserID)
 }
 
-const scriptLeftRoundKeyFmt = "device_script_left_round:%d_%d"
+const scriptLeftRoundKeyFmt = "device_script_left_round:%d_%d_%d"
 
-func DeviceScriptLeftRoundKey(deviceID, scriptID uint) string {
-	return fmt.Sprintf(scriptLeftRoundKeyFmt, deviceID, scriptID)
+func DeviceScriptLeftRoundKey(deviceID, scriptID, deviceUserID uint) string {
+	return fmt.Sprintf(scriptLeftRoundKeyFmt, deviceID, scriptID, deviceUserID)
+}
+
+const (
+	deviceLastDeviceUserIdEndTaskTimeKeyFmt = "DeviceLastDeviceUserIdEndTaskTime:%s:%s"
+	deviceLastDeviceUserIdEndTaskTimeTTL    = 40 * time.Minute
+)
+
+func deviceLastDeviceUserIdEndTaskTimeKey(serial, deviceUserID string) string {
+	return fmt.Sprintf(deviceLastDeviceUserIdEndTaskTimeKeyFmt, serial, deviceUserID)
+}
+
+// UpdateLastDeviceUserIdEndTaskTime 记录设备某 Android 用户最近一次任务结束时间，40 分钟有效。
+func UpdateLastDeviceUserIdEndTaskTime(ctx context.Context, serial, deviceUserID string) error {
+	if database.RDB == nil {
+		return nil
+	}
+	if serial == "" {
+		return nil
+	}
+	key := deviceLastDeviceUserIdEndTaskTimeKey(serial, deviceUserID)
+	return database.RDB.Set(ctx, key, time.Now().Format(time.RFC3339), deviceLastDeviceUserIdEndTaskTimeTTL).Err()
+}
+
+// GetLastDeviceUserIdEndTaskTime 返回距该设备用户最近一次任务结束的秒数。
+// key 不存在或解析失败时视为足够空闲，返回一个很大的秒数。
+func GetLastDeviceUserIdEndTaskTime(ctx context.Context, serial string, deviceUserID uint) int {
+	const idleEnoughSeconds = 365 * 24 * 3600
+	if database.RDB == nil || serial == "" {
+		return idleEnoughSeconds
+	}
+	key := deviceLastDeviceUserIdEndTaskTimeKey(serial, strconv.FormatUint(uint64(deviceUserID), 10))
+	val, err := database.RDB.Get(ctx, key).Result()
+	if err != nil || val == "" {
+		return idleEnoughSeconds
+	}
+	t, err := time.Parse(time.RFC3339, val)
+	if err != nil {
+		return idleEnoughSeconds
+	}
+	sec := int(time.Since(t).Seconds())
+	if sec < 0 {
+		return 0
+	}
+	return sec
+}
+
+type scriptUserKey struct {
+	ScriptID     uint
+	DeviceUserID uint
 }
 
 func maxDevicesPerIpCacheTTL(limit int) time.Duration {
@@ -419,32 +468,47 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 		itemsByPlan[it.PlanTaskID] = append(itemsByPlan[it.PlanTaskID], it)
 	}
 
-	// 3. 今天 0 点起，该设备已执行任务按 script_id 累加分钟数
+	// 3. 加载设备上的 Android 用户；今天 0 点起按 script_id + device_user_id 累加已执行分钟
+	var profiles []model.DeviceUserProfile
+	if err := database.DB.Where("device_serial = ?", device.Serial).Find(&profiles).Error; err != nil {
+		fmt.Printf("checkPlanTask get profiles failed err=%v\n", err)
+		return
+	}
+	deviceUserIDs := make([]uint, 0, len(profiles))
+	for _, p := range profiles {
+		deviceUserIDs = append(deviceUserIDs, p.UserID)
+	}
+	if len(deviceUserIDs) == 0 {
+		deviceUserIDs = []uint{0}
+	}
+
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	type execRow struct {
 		ScriptID                   uint
+		DeviceUserID               uint
 		ExecutedMinutes            int
 		TimerTrigedExecutedMinutes int
 	}
 	var execRows []execRow
 	if err := database.DB.Model(&model.Task{}).
-		Select("script_id AS script_id, COALESCE(SUM(total_minutes), 0) AS executed_minutes, COALESCE(SUM(CASE WHEN TASK_TYPE = 'time_shot' THEN total_minutes ELSE 0 END), 0) AS timer_triged_executed_minutes").
+		Select("script_id AS script_id, device_user_id AS device_user_id, COALESCE(SUM(total_minutes), 0) AS executed_minutes, COALESCE(SUM(CASE WHEN TASK_TYPE = 'time_shot' THEN total_minutes ELSE 0 END), 0) AS timer_triged_executed_minutes").
 		Where("device_id = ? AND status=2 AND created_at >= ?", device.ID, todayStart).
-		Group("script_id").
+		Group("script_id, device_user_id").
 		Scan(&execRows).Error; err != nil {
 		fmt.Printf("checkPlanTask get execRows failed err=%v\n", err)
 		return
 	}
 
-	executedByScript := make(map[uint]int, len(execRows))
-	timerTrigedExecutedByScript := make(map[uint]int, len(execRows))
+	executedByScriptUser := make(map[scriptUserKey]int, len(execRows))
+	timerTrigedExecutedByScriptUser := make(map[scriptUserKey]int, len(execRows))
 	for _, r := range execRows {
-		executedByScript[r.ScriptID] = r.ExecutedMinutes
-		timerTrigedExecutedByScript[r.ScriptID] = r.TimerTrigedExecutedMinutes
+		k := scriptUserKey{ScriptID: r.ScriptID, DeviceUserID: r.DeviceUserID}
+		executedByScriptUser[k] = r.ExecutedMinutes
+		timerTrigedExecutedByScriptUser[k] = r.TimerTrigedExecutedMinutes
 	}
 
-	// 4. 遍历每个计划任务及其条目，按需创建 Task 行
+	// 4. 遍历每个计划任务及其条目，按设备用户分别判断额度并创建 Task 行
 	for _, pt := range planTasks {
 		items := itemsByPlan[pt.ID]
 		if len(items) == 0 {
@@ -452,10 +516,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			continue
 		}
 		// IdleMinutes 为 0 表示不限制；否则需空闲达到指定分钟数才触发
-		if pt.IdleMinutes > 0 && idleSeconds < pt.IdleMinutes*60 {
-			fmt.Printf("checkPlanTask idleSeconds < planTask.IdleMinutes*60 idleSeconds=%d planTask.IdleMinutes=%d\n", idleSeconds, pt.IdleMinutes)
-			continue
-		}
+
 		if pt.ExecutionOrder == model.PlanTaskExecutionOrderRandom {
 			rand.Shuffle(len(items), func(i, j int) {
 				items[i], items[j] = items[j], items[i]
@@ -476,116 +537,120 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			if round <= 0 {
 				round = 1
 			}
-
 			required := round * duration
-			executed := executedByScript[item.ScriptID]
-			if pt.IsTimedTrigger {
-				if timerTrigedExecutedByScript[item.ScriptID] >= required {
-					//fmt.Printf("checkPlanTask timerTrigedExecutedByScript >= required timerTrigedExecutedByScript=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", timerTrigedExecutedByScript[item.ScriptID], required, pt.ID, item.ID)
-					continue
-				}
-			} else {
-				if executed >= required {
-					//fmt.Printf("checkPlanTask executed >= required executed=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", executed, required, pt.ID, item.ID)
-					continue
-				}
-			}
 
-			task_type := ""
-			if pt.IsTimedTrigger {
-				task_type = "time_shot"
-				parsed, err := time.ParseInLocation("15:04", strings.TrimSpace(item.StartTime), now.Location())
-				if err != nil {
-					//fmt.Printf("checkPlanTask parse start time failed err=%v planTask.ID=%d plantaskitem.ID=%d\n", err, pt.ID, item.ID)
-					continue
-				}
-				startMoment := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
-				if now.Before(startMoment) {
-					//fmt.Printf("checkPlanTask now.Before(startMoment) now=%s startMoment=%s planTask.ID=%d plantaskitem.ID=%d\n", now, startMoment, pt.ID, item.ID)
-					continue
-				}
-			}
-			leftRoundKey := DeviceScriptLeftRoundKey(device.ID, item.ScriptID)
-			leftRound := 0
-			if database.RDB != nil {
-				ctx := context.Background()
-				val, err := database.RDB.Get(ctx, leftRoundKey).Int()
-				if err == redis.Nil {
-					leftRound = item.TotalRound
-					if err := database.RDB.Set(ctx, leftRoundKey, leftRound, 0).Err(); err != nil {
-						fmt.Printf("set device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+			for _, deviceUserID := range deviceUserIDs {
+
+				if pt.IdleMinutes > 0 {
+					deviceUserIdIdleSeconds := GetLastDeviceUserIdEndTaskTime(context.Background(), device.Serial, deviceUserID)
+					if deviceUserIdIdleSeconds < pt.IdleMinutes*60 {
+						fmt.Printf("checkPlanTask idleSeconds < planTask.IdleMinutes*60 idleSeconds=%d planTask.IdleMinutes=%d\n", idleSeconds, pt.IdleMinutes)
+						continue
 					}
-				} else if err != nil {
-					fmt.Printf("get device script left round failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
+				}
+				execKey := scriptUserKey{ScriptID: item.ScriptID, DeviceUserID: deviceUserID}
+				executed := executedByScriptUser[execKey]
+				if pt.IsTimedTrigger {
+					if timerTrigedExecutedByScriptUser[execKey] >= required {
+						continue
+					}
 				} else {
-					leftRound = val
+					if executed >= required {
+						continue
+					}
 				}
 
-				if leftRound <= 0 {
-					fmt.Printf("checkPlanTask leftRound <= 0 leftRound=%d planTask.ID=%d plantaskitem.ID=%d device.Id=%d device.serial=%s\n", leftRound, pt.ID, item.ID, device.ID, device.Serial)
-					continue
+				task_type := ""
+				if pt.IsTimedTrigger {
+					task_type = "time_shot"
+					parsed, err := time.ParseInLocation("15:04", strings.TrimSpace(item.StartTime), now.Location())
+					if err != nil {
+						continue
+					}
+					startMoment := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
+					if now.Before(startMoment) {
+						continue
+					}
 				}
-			}
+				leftRoundKey := DeviceScriptLeftRoundKey(device.ID, item.ScriptID, deviceUserID)
+				leftRound := 0
+				if database.RDB != nil {
+					ctx := context.Background()
+					val, err := database.RDB.Get(ctx, leftRoundKey).Int()
+					if err == redis.Nil {
+						leftRound = item.TotalRound
+						if err := database.RDB.Set(ctx, leftRoundKey, leftRound, 0).Err(); err != nil {
+							fmt.Printf("set device script left round failed device=%d script=%d deviceUser=%d err=%v", device.ID, item.ScriptID, deviceUserID, err)
+						}
+					} else if err != nil {
+						fmt.Printf("get device script left round failed device=%d script=%d deviceUser=%d err=%v", device.ID, item.ScriptID, deviceUserID, err)
+					} else {
+						leftRound = val
+					}
 
-			dedupeKey := planTaskItemDedupeKey(device.ID, item.ScriptID)
-			if database.RDB != nil {
-				ok, err := database.RDB.SetNX(context.Background(), dedupeKey, "1", time.Duration(pt.IdleMinutes+1)*time.Minute).Result()
-				if err != nil {
-					fmt.Printf("set plan task dedupe key failed device=%d script=%d err=%v", device.ID, item.ScriptID, err)
-				} else if !ok {
-					fmt.Printf("exists continue")
-					continue
+					if leftRound <= 0 {
+						fmt.Printf("checkPlanTask leftRound <= 0 leftRound=%d planTask.ID=%d plantaskitem.ID=%d device.Id=%d device.serial=%s deviceUser=%d\n", leftRound, pt.ID, item.ID, device.ID, device.Serial, deviceUserID)
+						continue
+					}
 				}
-			}
-			lock_slot := 0
-			if item.Script.MaxDevicesPerIp > 0 {
 
+				dedupeKey := planTaskItemDedupeKey(device.ID, item.ScriptID, deviceUserID)
+				if database.RDB != nil {
+					ok, err := database.RDB.SetNX(context.Background(), dedupeKey, "1", time.Duration(pt.IdleMinutes+1)*time.Minute).Result()
+					if err != nil {
+						fmt.Printf("set plan task dedupe key failed device=%d script=%d deviceUser=%d err=%v", device.ID, item.ScriptID, deviceUserID, err)
+					} else if !ok {
+						fmt.Printf("exists continue")
+						continue
+					}
+				}
+				lock_slot := 0
 				if item.Script.MaxDevicesPerIp > 0 {
 					lock_slot = getScriptLockSlot(context.Background(), item.Script.ID, item.Script.MaxDevicesPerIp, ip, device.Serial, duration)
 					if lock_slot <= 0 {
 						_ = database.RDB.Del(context.Background(), dedupeKey).Err()
 						continue
 					}
-
 				}
-			}
 
-			task := model.Task{
-				UserID:         device.UserID,
-				DeviceID:       device.ID,
-				DeviceSerial:   device.Serial,
-				ScriptID:       item.ScriptID,
-				Args:           item.Args,
-				StartTime:      nil,
-				EndTime:        nil,
-				TotalMinutes:   duration,
-				TotalRound:     1,
-				LeftRound:      1,
-				LeftMinute:     duration,
-				Status:         model.TaskStatusNotStarted,
-				PlanTaskID:     int(pt.ID),
-				PlanTaskItemID: int(item.ID),
-				CreatedAt:      now,
-				UpdatedAt:      now,
-				LockSlot:       lock_slot,
-				TASK_TYPE:      task_type,
-			}
-			if err := database.DB.Create(&task).Error; err != nil {
-				fmt.Printf("create plan task row failed device=%s script=%d err=%v", device.Serial, item.ScriptID, err)
-				if database.RDB != nil {
-					_ = database.RDB.Del(context.Background(), dedupeKey).Err()
-					if lock_slot > 0 {
-						ReleaseScriptLockSlot(context.Background(), item.ScriptID, lock_slot, device.Serial, ip)
+				task := model.Task{
+					UserID:         device.UserID,
+					DeviceID:       device.ID,
+					DeviceSerial:   device.Serial,
+					ScriptID:       item.ScriptID,
+					Args:           item.Args,
+					StartTime:      nil,
+					EndTime:        nil,
+					TotalMinutes:   duration,
+					TotalRound:     1,
+					LeftRound:      1,
+					LeftMinute:     duration,
+					Status:         model.TaskStatusNotStarted,
+					PlanTaskID:     int(pt.ID),
+					PlanTaskItemID: int(item.ID),
+					DeviceUserID:   deviceUserID,
+					CreatedAt:      now,
+					UpdatedAt:      now,
+					LockSlot:       lock_slot,
+					TASK_TYPE:      task_type,
+				}
+				if err := database.DB.Create(&task).Error; err != nil {
+					fmt.Printf("create plan task row failed device=%s script=%d deviceUser=%d err=%v", device.Serial, item.ScriptID, deviceUserID, err)
+					if database.RDB != nil {
+						_ = database.RDB.Del(context.Background(), dedupeKey).Err()
+						if lock_slot > 0 {
+							ReleaseScriptLockSlot(context.Background(), item.ScriptID, lock_slot, device.Serial, ip)
+						}
 					}
+					continue
 				}
-				continue
+				if database.RDB != nil {
+					_ = database.RDB.Set(context.Background(), leftRoundKey, leftRound-1, 0).Err()
+				}
+				// 把刚刚入队的执行时长计入，避免同一脚本+用户被本轮循环重复入队
+				executedByScriptUser[execKey] = executed + duration
+				return
 			}
-			if database.RDB != nil {
-				_ = database.RDB.Set(context.Background(), leftRoundKey, leftRound-1, 0).Err()
-			}
-			// 把刚刚入队的执行时长计入，避免同一脚本被本轮循环重复入队
-			executedByScript[item.ScriptID] = executed + duration
-			return
 		}
 	}
 }
