@@ -231,7 +231,7 @@ func registerHeartbeatClient(job *heartbeatJob) {
 	if job.serial == "" {
 		return
 	}
-	fmt.Printf("registerHeartbeatClient serial=%s ip=%s\n", job.serial, job.from.IP.String())
+	//fmt.Printf("registerHeartbeatClient serial=%s ip=%s\n", job.serial, job.from.IP.String())
 	ctx := context.Background()
 	if err := database.RDB.Set(ctx, OnlineDevicePrefix+job.serial, job.from.IP.String(), clientStaleTimeout).Err(); err != nil {
 		fmt.Printf("set online device ttl failed serial=%s err=%v", job.serial, err)
@@ -351,7 +351,7 @@ func getScriptLockSlot(ctx context.Context, scriptID uint, maxDevicesPerIp int, 
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
 func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
-	fmt.Printf("checkPlanTask device.Serial=%s idleSeconds=%d ip=%s device.id=%d device.user_id=%d\n", device.Serial, idleSeconds, ip, device.ID, device.UserID)
+	//fmt.Printf("checkPlanTask device.Serial=%s idleSeconds=%d ip=%s device.id=%d device.user_id=%d\n", device.Serial, idleSeconds, ip, device.ID, device.UserID)
 	// if config.Cfg.IS_DEBUG {
 	// 	return
 	// }
@@ -380,7 +380,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 	if err := database.DB.
 		Where("device_id = ? AND user_id = ?", device.ID, device.UserID).
 		Find(&devicePlanTasks).Error; err != nil {
-		fmt.Printf("checkPlanTask get devicePlanTasks failed err=%v\n", err)
+		//fmt.Printf("checkPlanTask get devicePlanTasks failed err=%v\n", err)
 		return
 	}
 	if len(devicePlanTasks) == 0 {
@@ -481,12 +481,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			executed := executedByScript[item.ScriptID]
 			if pt.IsTimedTrigger {
 				if timerTrigedExecutedByScript[item.ScriptID] >= required {
-					fmt.Printf("checkPlanTask timerTrigedExecutedByScript >= required timerTrigedExecutedByScript=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", timerTrigedExecutedByScript[item.ScriptID], required, pt.ID, item.ID)
+					//fmt.Printf("checkPlanTask timerTrigedExecutedByScript >= required timerTrigedExecutedByScript=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", timerTrigedExecutedByScript[item.ScriptID], required, pt.ID, item.ID)
 					continue
 				}
 			} else {
 				if executed >= required {
-					fmt.Printf("checkPlanTask executed >= required executed=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", executed, required, pt.ID, item.ID)
+					//fmt.Printf("checkPlanTask executed >= required executed=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", executed, required, pt.ID, item.ID)
 					continue
 				}
 			}
@@ -496,12 +496,12 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				task_type = "time_shot"
 				parsed, err := time.ParseInLocation("15:04", strings.TrimSpace(item.StartTime), now.Location())
 				if err != nil {
-					fmt.Printf("checkPlanTask parse start time failed err=%v planTask.ID=%d plantaskitem.ID=%d\n", err, pt.ID, item.ID)
+					//fmt.Printf("checkPlanTask parse start time failed err=%v planTask.ID=%d plantaskitem.ID=%d\n", err, pt.ID, item.ID)
 					continue
 				}
 				startMoment := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
 				if now.Before(startMoment) {
-					fmt.Printf("checkPlanTask now.Before(startMoment) now=%s startMoment=%s planTask.ID=%d plantaskitem.ID=%d\n", now, startMoment, pt.ID, item.ID)
+					//fmt.Printf("checkPlanTask now.Before(startMoment) now=%s startMoment=%s planTask.ID=%d plantaskitem.ID=%d\n", now, startMoment, pt.ID, item.ID)
 					continue
 				}
 			}
@@ -549,7 +549,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 
 				}
 			}
-			fmt.Printf("what a")
+
 			task := model.Task{
 				UserID:         device.UserID,
 				DeviceID:       device.ID,
@@ -592,7 +592,6 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 
 // maybeRunPendingTaskFromHeartbeat 在设备空闲心跳时检查是否有待运行任务并下发
 func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
-	fmt.Printf("maybeRunPendingTaskFromHeartbeat job.serial=%s job.hasTask=%d\n", job.serial, job.hasTask)
 	ctx := context.Background()
 	if job.hasTask != 0 {
 		if err := upsertRunningDeviceInRedis(ctx, job.uid, job.from.IP.String(), job.serial); err != nil {
@@ -629,7 +628,7 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 			fmt.Printf("device expired serial=%s\n", job.serial)
 			return
 		}
-		fmt.Printf("checkPlanTask Job.serial=%s idleSeconds=%d\n", job.serial, job.idleSeconds)
+		//fmt.Printf("checkPlanTask Job.serial=%s idleSeconds=%d\n", job.serial, job.idleSeconds)
 		checkPlanTask(&device, job.idleSeconds, job.from.IP.String())
 		var newTask model.Task
 
