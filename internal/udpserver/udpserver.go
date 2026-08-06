@@ -522,7 +522,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				}
 
 				if leftRound <= 0 {
-					fmt.Printf("checkPlanTask leftRound <= 0 leftRound=%d planTask.ID=%d plantaskitem.ID=%d\n", leftRound, pt.ID, item.ID)
+					fmt.Printf("checkPlanTask leftRound <= 0 leftRound=%d planTask.ID=%d plantaskitem.ID=%d device.Id=%d device.serial=%s\n", leftRound, pt.ID, item.ID, device.ID, device.Serial)
 					continue
 				}
 			}
