@@ -493,7 +493,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 	var execRows []execRow
 	if err := database.DB.Model(&model.Task{}).
 		Select("script_id AS script_id, device_user_id AS device_user_id, COALESCE(SUM(total_minutes), 0) AS executed_minutes, COALESCE(SUM(CASE WHEN TASK_TYPE = 'time_shot' THEN total_minutes ELSE 0 END), 0) AS timer_triged_executed_minutes").
-		Where("device_id = ? AND status=2 AND created_at >= ?", device.ID, todayStart).
+		Where("device_id = ? AND ( status=2 OR status=7 ) AND created_at >= ?", device.ID, todayStart).
 		Group("script_id, device_user_id").
 		Scan(&execRows).Error; err != nil {
 		fmt.Printf("checkPlanTask get execRows failed err=%v\n", err)

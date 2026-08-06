@@ -6,13 +6,14 @@ import (
 
 // 任务状态
 const (
-	TaskStatusNotStarted  = 0 // 未开始
-	TaskStatusRunning     = 1 // 执行中
-	TaskStatusCompleted   = 2 // 正常结束
-	TaskStatusAccountBan  = 3 // 账号被ban
-	TaskStatusAbnormalEnd = 4 // 异常结束
-	TaskStatusTimeout     = 5 // 超时结束
-	TaskStatusOnHold      = 6 // 挂起
+	TaskStatusNotStarted      = 0 // 未开始
+	TaskStatusRunning         = 1 // 执行中
+	TaskStatusCompleted       = 2 // 正常结束
+	TaskStatusAccountBan      = 3 // 账号被ban
+	TaskStatusAbnormalEnd     = 4 // 异常结束
+	TaskStatusTimeout         = 5 // 超时结束
+	TaskStatusOnHold          = 6 // 挂起
+	TaskStatusAppNotInstalled = 7 // 应用未安装
 )
 
 // Task 任务模型

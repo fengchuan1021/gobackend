@@ -117,7 +117,7 @@ func GetTaskDetail(c *gin.Context) {
 	BASE_DIR := config.Cfg.SOLUTION_DIR + "/antares_assets"
 	full_path := filepath.Join(BASE_DIR, file_path)
 	content, err := os.ReadFile(full_path)
-	fmt.Println("content", string(content))
+
 	if err != nil {
 		fmt.Println("read file failed", err)
 		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "read file failed"})
@@ -456,7 +456,12 @@ func ClientFinishTask(c *gin.Context) {
 	if req.Status != model.TaskStatusOnHold {
 		task.LeftRound--
 	}
-
+	if req.Status == model.TaskStatusAppNotInstalled {
+		task.EndTime = &now
+		task.LeftRound = 0
+		task.Status = model.TaskStatusAppNotInstalled
+		database.DB.Save(&task)
+	}
 	if req.Status == model.TaskStatusCompleted {
 		udpserver.UpdateLastDeviceUserIdEndTaskTime(context.Background(), req.Serial, req.DeviceUserID)
 		if task.LeftRound > 0 {
