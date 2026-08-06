@@ -485,7 +485,7 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 				}
 			} else {
 				if executed >= required {
-					fmt.Printf("checkPlanTask executed >= required executed=%d required=%d planTask.ID=%d\n", executed, required, pt.ID)
+					fmt.Printf("checkPlanTask executed >= required executed=%d required=%d planTask.ID=%d plantaskitem.ID=%d\n", executed, required, pt.ID, item.ID)
 					continue
 				}
 			}
