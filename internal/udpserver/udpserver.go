@@ -352,7 +352,7 @@ func getScriptLockSlot(ctx context.Context, scriptID uint, maxDevicesPerIp int, 
 // checkPlanTask 在设备空闲时为它生成今日还未达到额度的计划任务对应的 model.Task 行；
 // 实际下发由后续 maybeRunPendingTaskFromHeartbeat 中的 SendCommand 处理。
 func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
-	fmt.Printf("checkPlanTask device.Serial=%s idleSeconds=%d ip=%s\n", device.Serial, idleSeconds, ip)
+	fmt.Printf("checkPlanTask device.Serial=%s idleSeconds=%d ip=%s device.id=%d device.user_id=%d\n", device.Serial, idleSeconds, ip, device.ID, device.UserID)
 	// if config.Cfg.IS_DEBUG {
 	// 	return
 	// }
