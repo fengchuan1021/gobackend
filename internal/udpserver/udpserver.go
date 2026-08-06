@@ -619,11 +619,10 @@ func maybeRunPendingTaskFromHeartbeat(job *heartbeatJob) {
 		fmt.Printf("checkPlanTask idleSeconds=%d\n", job.idleSeconds)
 		checkPlanTask(&device, job.idleSeconds, job.from.IP.String())
 		var newTask model.Task
-		now := time.Now()
+
 		if err := database.DB.Where(
-			"device_serial = ? and (status=0 or status=6) and (on_hold_end_time IS NULL OR on_hold_end_time > ?)",
-			job.serial, now,
-		).First(&newTask).Error; err != nil {
+			"device_serial = ? and status=0",
+			job.serial).First(&newTask).Error; err != nil {
 			return
 		}
 		if newTask.ID != 0 {
