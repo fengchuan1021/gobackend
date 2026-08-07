@@ -234,7 +234,9 @@ func ClientAddTask(c *gin.Context) {
 		})
 	added := false
 	deviceUserID := int(0)
-	deviceUserID, err = strconv.Atoi(req.DeviceUserID)
+	if len(req.Serials) == 1 {
+		deviceUserID, _ = strconv.Atoi(req.DeviceUserID)
+	}
 
 	for _, serial := range req.Serials {
 		var device model.Device
