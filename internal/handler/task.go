@@ -176,11 +176,12 @@ func GetTaskDetail(c *gin.Context) {
 }
 
 type ClientAddTaskReq struct {
-	ScriptIDs []int                  `json:"script_ids" binding:"required"`
-	Time      int                    `json:"time" binding:"required"`
-	Rounds    int                    `json:"rounds" binding:"required"`
-	Params    map[string]interface{} `json:"params" binding:"required"`
-	Serials   []string               `json:"serials" binding:"required"`
+	ScriptIDs    []int                  `json:"script_ids" binding:"required"`
+	Time         int                    `json:"time" binding:"required"`
+	Rounds       int                    `json:"rounds" binding:"required"`
+	Params       map[string]interface{} `json:"params" binding:"required"`
+	Serials      []string               `json:"serials" binding:"required"`
+	DeviceUserID string                 `json:"device_user_id"`
 }
 
 func ClientAddTask(c *gin.Context) {
@@ -232,6 +233,8 @@ func ClientAddTask(c *gin.Context) {
 			"end_time": &now,
 		})
 	added := false
+	deviceUserID := int(0)
+	deviceUserID, err = strconv.Atoi(req.DeviceUserID)
 
 	for _, serial := range req.Serials {
 		var device model.Device
@@ -247,7 +250,9 @@ func ClientAddTask(c *gin.Context) {
 		rand.Shuffle(len(req.ScriptIDs), func(i, j int) {
 			req.ScriptIDs[i], req.ScriptIDs[j] = req.ScriptIDs[j], req.ScriptIDs[i]
 		})
+
 		for _, scriptID := range req.ScriptIDs {
+
 			task = model.Task{
 				UserID:       device.UserID,
 				DeviceID:     device.ID,
@@ -262,6 +267,7 @@ func ClientAddTask(c *gin.Context) {
 				LeftMinute:   req.Time,
 				CreatedAt:    time.Now(),
 				UpdatedAt:    time.Now(),
+				DeviceUserID: uint(deviceUserID),
 			}
 			if err := database.DB.Create(&task).Error; err != nil {
 				continue
