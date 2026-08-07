@@ -515,39 +515,32 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 			fmt.Printf("checkPlanTask items is empty planTask.ID=%d\n", pt.ID)
 			continue
 		}
-		// IdleMinutes 为 0 表示不限制；否则需空闲达到指定分钟数才触发
 
 		if pt.ExecutionOrder == model.PlanTaskExecutionOrderRandom {
 			rand.Shuffle(len(items), func(i, j int) {
 				items[i], items[j] = items[j], items[i]
 			})
 		}
-		for _, item := range items {
-			fmt.Printf("checkPlanTask item.ID=%d item.ScriptID=%d job.serial=%s\n", item.ID, item.ScriptID, device.Serial)
-			if item.ScriptID == 0 {
-				fmt.Printf("checkPlanTask item.ScriptID is 0 planTask.ID=%d plantaskitem.ID=%d\n", pt.ID, item.ID)
-				continue
-			}
-			duration := item.DurationMinute
-			if duration <= 0 {
-				fmt.Printf("checkPlanTask duration <= 0 duration=%d planTask.ID=%d plantaskitem.ID=%d\n", duration, pt.ID, item.ID)
-				duration = 40
-			}
-			round := item.TotalRound
-			if round <= 0 {
-				round = 1
-			}
-			required := round * duration
-
-			for _, deviceUserID := range deviceUserIDs {
-
-				if pt.IdleMinutes > 0 {
-					deviceUserIdIdleSeconds := GetLastDeviceUserIdEndTaskTime(context.Background(), device.Serial, deviceUserID)
-					if deviceUserIdIdleSeconds < pt.IdleMinutes*60 {
-						fmt.Printf("checkPlanTask idleSeconds < planTask.IdleMinutes*60 idleSeconds=%d planTask.IdleMinutes=%d\n", idleSeconds, pt.IdleMinutes)
-						continue
-					}
+		for _, deviceUserID := range deviceUserIDs {
+			if pt.IdleMinutes > 0 {
+				deviceUserIdIdleSeconds := GetLastDeviceUserIdEndTaskTime(context.Background(), device.Serial, deviceUserID)
+				fmt.Printf("checkPlanTask deviceUserIdIdleSeconds=%d planTask.IdleMinutes=%d key=%s\n", deviceUserIdIdleSeconds, pt.IdleMinutes, deviceLastDeviceUserIdEndTaskTimeKey(device.Serial, strconv.FormatUint(uint64(deviceUserID), 10)))
+				if deviceUserIdIdleSeconds < pt.IdleMinutes*60 {
+					fmt.Printf("checkPlanTask idleSeconds < planTask.IdleMinutes*60 idleSeconds=%d planTask.IdleMinutes=%d\n", idleSeconds, pt.IdleMinutes)
+					continue
 				}
+			}
+			for _, item := range items {
+				duration := item.DurationMinute
+				if duration <= 0 {
+					duration = 40
+				}
+				round := item.TotalRound
+				if round <= 0 {
+					round = 1
+				}
+				required := round * duration
+
 				execKey := scriptUserKey{ScriptID: item.ScriptID, DeviceUserID: deviceUserID}
 				executed := executedByScriptUser[execKey]
 				if pt.IsTimedTrigger {

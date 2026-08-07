@@ -463,7 +463,7 @@ func ClientFinishTask(c *gin.Context) {
 		database.DB.Save(&task)
 	}
 	if req.Status == model.TaskStatusCompleted {
-		udpserver.UpdateLastDeviceUserIdEndTaskTime(context.Background(), req.Serial, req.DeviceUserID)
+
 		if task.LeftRound > 0 {
 			clone := model.Task{
 				UserID:       task.UserID,
@@ -488,7 +488,9 @@ func ClientFinishTask(c *gin.Context) {
 		task.Status = model.TaskStatusCompleted
 		task.LeftRound = 0
 		database.DB.Save(&task)
-
+		if task.StartTime != nil && task.EndTime.Sub(*task.StartTime) > 420*time.Second {
+			udpserver.UpdateLastDeviceUserIdEndTaskTime(context.Background(), req.Serial, req.DeviceUserID)
+		}
 	}
 
 	if req.Status == model.TaskStatusAbnormalEnd {
