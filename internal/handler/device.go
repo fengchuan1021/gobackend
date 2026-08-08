@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"gobackend/internal/aes_utils"
 	"gobackend/internal/database"
 	"gobackend/internal/middleware"
 	"gobackend/internal/model"
@@ -65,8 +67,17 @@ func RegisterDevice(c *gin.Context) {
 	var device model.Device
 	err := database.DB.Where("serial = ?", req.Serial).First(&device).Error
 	if err == nil {
-		fmt.Println(err)
-		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设备已存在", "data": device})
+		var expireUnix int64
+		if device.ExpireAt != nil {
+			expireUnix = device.ExpireAt.Unix()
+		}
+		encrypted, encErr := aes_utils.Encrypt(strconv.FormatInt(expireUnix, 10))
+		if encErr != nil {
+			fmt.Println(encErr)
+			c.JSON(http.StatusInternalServerError, gin.H{"msg": "加密失败"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设备已存在", "data": encrypted})
 		return
 	}
 	userID, exists := c.Get(middleware.UserIDKey)
@@ -88,7 +99,7 @@ func RegisterDevice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "注册失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "注册成功", "data": device})
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "注册成功", "data": device})
 }
 
 // GetInitShellScripts 获取 init shell scripts 配置（cfg.Value 为 ";" 分割的 shell 语句，返回 JSON 数组）
