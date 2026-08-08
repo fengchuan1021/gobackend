@@ -90,7 +90,10 @@ func ResetPlanTaskItemLeftRounds() error {
 	}
 
 	var devicePlanTasks []model.DevicePlanTask
-	if err := database.DB.Find(&devicePlanTasks).Error; err != nil {
+	if err := database.DB.
+		Joins("JOIN devices ON devices.id = device_plan_tasks.device_id").
+		Where("devices.expire_at > ?", time.Now()).
+		Find(&devicePlanTasks).Error; err != nil {
 		return err
 	}
 	if len(devicePlanTasks) == 0 {
@@ -125,12 +128,26 @@ func ResetPlanTaskItemLeftRounds() error {
 
 	profilesBySerial := make(map[string][]uint, len(serials))
 	if len(serials) > 0 {
-		var profiles []model.DeviceUserProfile
-		if err := database.DB.Where("device_serial IN ?", serials).Find(&profiles).Error; err != nil {
+		var devices []model.Device
+		if err := database.DB.Select("serial", "is_svip").Where("serial IN ?", serials).Find(&devices).Error; err != nil {
 			return err
 		}
-		for _, p := range profiles {
-			profilesBySerial[p.DeviceSerial] = append(profilesBySerial[p.DeviceSerial], p.UserID)
+		svipSerials := make([]string, 0, len(devices))
+		for _, d := range devices {
+			if d.IsSvip {
+				svipSerials = append(svipSerials, d.Serial)
+			} else {
+				profilesBySerial[d.Serial] = []uint{0}
+			}
+		}
+		if len(svipSerials) > 0 {
+			var profiles []model.DeviceUserProfile
+			if err := database.DB.Where("device_serial IN ?", svipSerials).Find(&profiles).Error; err != nil {
+				return err
+			}
+			for _, p := range profiles {
+				profilesBySerial[p.DeviceSerial] = append(profilesBySerial[p.DeviceSerial], p.UserID)
+			}
 		}
 	}
 
