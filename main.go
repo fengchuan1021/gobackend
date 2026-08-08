@@ -153,6 +153,7 @@ func main() {
 		api.DELETE("/devices/groups/:id", middleware.Auth, handler.DeleteDeviceGroup)
 		api.POST("/devices/sort_numbers", middleware.Auth, handler.UpdateDeviceSortNumbers)
 		api.PATCH("/devices/meta/:id", middleware.Auth, handler.UpdateDeviceMeta)
+		api.PATCH("/devices/svip/:id", middleware.Auth, handler.UpdateDeviceSvip)
 		api.PATCH("/devices/add_device_expire_time/:id", middleware.Auth, handler.UpdateDevice)
 		api.POST("/plan_tasks/list", middleware.Auth, handler.ListPlanTasks)
 		api.POST("/plan_tasks/create", middleware.Auth, handler.CreatePlanTask)

@@ -327,6 +327,64 @@ func UpdateDevice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "更新成功", "data": device})
 }
 
+// UpdateDeviceSvipReq 更新设备 SVIP 请求
+type UpdateDeviceSvipReq struct {
+	IsSvip  *bool  `json:"is_svip"`
+	Oprator string `json:"oprator"`
+}
+
+// UpdateDeviceSvip 更新设备 is_svip
+// PATCH /api/devices/svip/:id
+func UpdateDeviceSvip(c *gin.Context) {
+	_, exists := c.Get(middleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	roleID, exists := c.Get(middleware.RoleIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 500, "msg": "未登录"})
+		return
+	}
+	roleIDValue := roleID.(uint)
+	if roleIDValue == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "无权限"})
+		return
+	}
+
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+
+	var req UpdateDeviceSvipReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "参数错误"})
+		return
+	}
+	if req.Oprator == "" || req.Oprator != "6hfmbmqsaeylbaro" {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "无权限"})
+		return
+	}
+	if req.IsSvip == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 500, "msg": "is_svip 不能为空"})
+		return
+	}
+
+	var device model.Device
+	if err := database.DB.First(&device, id).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "设备不存在"})
+		return
+	}
+	if err := database.DB.Model(&device).Update("is_svip", *req.IsSvip).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "更新失败"})
+		return
+	}
+	device.IsSvip = *req.IsSvip
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "更新成功", "data": device})
+}
+
 // GetTrickStoreConfig 获取 trick store config
 // POST /api/device/gettrickeystoreconfig
 func GetTrickStoreConfig(c *gin.Context) {
