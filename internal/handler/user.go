@@ -419,6 +419,45 @@ func GetSleepAfterTask(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": user.SleepAfterTaskMinutes})
 }
 
+func SaveDeepseekKey(c *gin.Context) {
+	uid := c.Query("uid")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 uid"})
+		return
+	}
+	var req struct {
+		APIKey string `json:"apikey"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("参数错误", err)
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
+		return
+	}
+	fmt.Println("apikey", req.APIKey)
+	if err := database.DB.Model(&model.User{}).Where("id = ?", uid).Updates(map[string]interface{}{
+		"api_key": req.APIKey,
+	}).Error; err != nil {
+		fmt.Println("保存失败", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "保存失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "保存成功"})
+}
+
+func GetDeepseekKey(c *gin.Context) {
+	uid := c.Query("uid")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 uid"})
+		return
+	}
+	var user model.User
+	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"msg": "用户不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": user.APIKey})
+}
+
 func GetUserConfig(c *gin.Context) {
 	uid := c.Query("uid")
 	if uid == "" {

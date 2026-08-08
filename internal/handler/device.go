@@ -77,7 +77,14 @@ func RegisterDevice(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"msg": "加密失败"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "设备已存在", "data": encrypted})
+		c.JSON(http.StatusOK, gin.H{
+			"code": 0,
+			"msg":  "设备已存在",
+			"data": gin.H{
+				"expire_at": encrypted,
+				"is_svip":   device.IsSvip,
+			},
+		})
 		return
 	}
 	userID, exists := c.Get(middleware.UserIDKey)
