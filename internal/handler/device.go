@@ -157,7 +157,11 @@ func SearchDevices(c *gin.Context) {
 	userID := userIDvalue.(uint)
 	serial := c.Query("serial")
 	listAll := c.Query("all") == "1" || c.Query("all") == "true"
-
+	oprator := c.Query("oprator")
+	if oprator != "6hfmbmqsaeylbaro" {
+		c.JSON(http.StatusOK, gin.H{"data": []model.Device{}})
+		return
+	}
 	var devices []model.Device
 	var err error
 	if listAll {
@@ -194,6 +198,7 @@ type UpdateDeviceReq struct {
 	// 否则从原 ExpireAt 开始增加。
 	AddDuration     *int    `json:"add_duration"`
 	AddDurationType *string `json:"add_duration_type"`
+	Oprator         string  `json:"oprator"`
 }
 
 // add_device_expire_time 更新设备（增加到期时间）
@@ -243,6 +248,10 @@ func UpdateDevice(c *gin.Context) {
 	}
 	roleIDValue := roleID.(uint)
 	if roleIDValue == 0 {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "无权限"})
+		return
+	}
+	if req.Oprator == "" || req.Oprator != "6hfmbmqsaeylbaro" {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "无权限"})
 		return
 	}
