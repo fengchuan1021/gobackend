@@ -50,8 +50,9 @@ func AppendLog(c *gin.Context) {
 
 // RegisterDeviceReq 设备注册请求
 type RegisterDeviceReq struct {
-	Serial string `json:"serial" binding:"required"`
-	Token  string `json:"token"`
+	Serial     string            `json:"serial" binding:"required"`
+	Token      string            `json:"token"`
+	DeviceInfo map[string]string `json:"device_info"`
 }
 
 // RegisterDevice 设备注册，若设备不存在则入库
@@ -65,8 +66,20 @@ func RegisterDevice(c *gin.Context) {
 		return
 	}
 	var device model.Device
+	var market_name string
+	if req.DeviceInfo != nil {
+		market_name = req.DeviceInfo["market_name"]
+	}
+	var client_ip string
+	if c.GetHeader("X-Forwarded-For") != "" {
+		client_ip = c.GetHeader("X-Forwarded-For")
+	} else {
+		client_ip = c.ClientIP()
+	}
 	err := database.DB.Where("serial = ?", req.Serial).First(&device).Error
 	if err == nil {
+		database.DB.Model(&device).Updates(map[string]interface{}{"market_name": market_name, "last_login_ip": client_ip})
+
 		var expireUnix int64
 		if device.ExpireAt != nil {
 			expireUnix = device.ExpireAt.Unix()
@@ -100,7 +113,7 @@ func RegisterDevice(c *gin.Context) {
 		return
 	}
 
-	device = model.Device{Serial: req.Serial, UserID: uid, Username: user.Username}
+	device = model.Device{Serial: req.Serial, UserID: uid, Username: user.Username, MarketName: market_name, LastLoginIp: client_ip}
 	if err := database.DB.Create(&device).Error; err != nil {
 		fmt.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "注册失败"})

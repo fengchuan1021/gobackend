@@ -23,6 +23,8 @@ type Device struct {
 	Tag           Tag         `gorm:"foreignKey:TagID;constraint:-" json:"tag,omitempty"`
 	Group         DeviceGroup `gorm:"foreignKey:GroupID;constraint:-" json:"group,omitempty"`
 	IsSvip        bool        `gorm:"default:false" json:"is_svip"`
+	MarketName    string      `gorm:"type:varchar(32);default:''" json:"market_name"`
+	LastLoginIp   string      `gorm:"type:varchar(32);default:''" json:"last_login_ip"`
 }
 
 // TableName 指定表名

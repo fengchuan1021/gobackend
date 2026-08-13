@@ -280,6 +280,7 @@ func registerHeartbeatClient(job *heartbeatJob) {
 	if job.serial == "" {
 		return
 	}
+
 	//fmt.Printf("registerHeartbeatClient serial=%s ip=%s\n", job.serial, job.from.IP.String())
 	ctx := context.Background()
 	if err := database.RDB.Set(ctx, OnlineDevicePrefix+job.serial, job.from.IP.String(), clientStaleTimeout).Err(); err != nil {
