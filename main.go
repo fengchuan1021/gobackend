@@ -57,6 +57,7 @@ func main() {
 		&model.QuestionAnswer{},
 		&model.CrontabTask{},
 		&model.DeviceUserProfile{},
+		&model.GameKeywords{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
