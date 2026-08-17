@@ -120,7 +120,7 @@ func main() {
 		api.POST("/user/login", handler.Login)
 		api.POST("/user/loginWithSerial", handler.LoginWithSerial)
 		api.POST("/user/register", handler.Register)
-		api.POST("/devices/register", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.RegisterDevice)
+		api.POST("/devices/register", middleware.AesRequest, middleware.AesResponse, handler.RegisterDevice)
 		api.POST("/devices/:serial/appendLog", handler.AppendLog)
 		api.POST("/devices/getinitshellscripts", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetInitShellScripts)
 		api.POST("/device/gettrickeystoreconfig", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetTrickStoreConfig)

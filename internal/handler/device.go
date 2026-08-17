@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -50,6 +51,7 @@ func AppendLog(c *gin.Context) {
 
 // RegisterDeviceReq 设备注册请求
 type RegisterDeviceReq struct {
+	Username   string            `json:"username"`
 	Serial     string            `json:"serial" binding:"required"`
 	Token      string            `json:"token"`
 	DeviceInfo map[string]string `json:"device_info"`
@@ -59,12 +61,44 @@ type RegisterDeviceReq struct {
 // 请求体已由 AesRequest 中间件解密，此处直接绑定明文 JSON
 // POST /api/devices/register
 func RegisterDevice(c *gin.Context) {
+	fmt.Println("register device")
+
 	var req RegisterDeviceReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fmt.Println(err)
 		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
 		return
 	}
+	token := req.Token
+	if token == "" {
+		token = c.GetHeader("token")
+	}
+	fmt.Println("token:", token)
+	var userID uint64
+
+	if token != "" {
+		parts := strings.SplitN(token, ":", 2)
+		if len(parts) == 2 {
+			b, err := hex.DecodeString(parts[0])
+			fmt.Println("b:", b)
+			if err == nil && len(b) == 16 {
+				xorResult, err := hex.DecodeString(parts[1])
+				fmt.Println("xorResult:", xorResult)
+				if err == nil && len(xorResult) > 0 {
+					data := make([]byte, len(xorResult))
+					for i := range xorResult {
+						data[i] = xorResult[i] ^ b[i%16]
+					}
+					userRole := strings.SplitN(string(data), ":", 2)
+					fmt.Println("userRole:", userRole)
+					userID, err = strconv.ParseUint(userRole[0], 10, 64)
+					fmt.Println("userID:", userID)
+				}
+			}
+		}
+	}
+
+	uid := userID
 	var device model.Device
 	var market_name string
 	if req.DeviceInfo != nil {
@@ -78,7 +112,7 @@ func RegisterDevice(c *gin.Context) {
 	}
 	err := database.DB.Where("serial = ?", req.Serial).First(&device).Error
 	if err == nil {
-		database.DB.Model(&device).Updates(map[string]interface{}{"market_name": market_name, "last_login_ip": client_ip})
+		database.DB.Model(&device).Updates(map[string]interface{}{"market_name": market_name, "last_login_ip": client_ip, "user_id": uid, "user_name": req.Username})
 
 		var expireUnix int64
 		if device.ExpireAt != nil {
@@ -100,20 +134,13 @@ func RegisterDevice(c *gin.Context) {
 		})
 		return
 	}
-	userID, exists := c.Get(middleware.UserIDKey)
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"msg": "未登录"})
-		return
-	}
-	uid := userID.(uint)
 
 	var user model.User
 	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"msg": "用户不存在"})
-		return
+
 	}
 
-	device = model.Device{Serial: req.Serial, UserID: uid, Username: user.Username, MarketName: market_name, LastLoginIp: client_ip}
+	device = model.Device{Serial: req.Serial, UserID: user.ID, Username: user.Username, MarketName: market_name, LastLoginIp: client_ip}
 	if err := database.DB.Create(&device).Error; err != nil {
 		fmt.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": "注册失败"})

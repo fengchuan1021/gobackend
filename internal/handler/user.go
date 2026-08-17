@@ -135,10 +135,14 @@ func LoginWithSerial(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "账号已被封禁"})
 		return
 	}
+	if device.User.ID != 0 {
+		token := genToken(device.UserID, device.User.RoleID)
+		profile := toProfile(&device.User)
+		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "登录成功", "data": LoginResp{Token: token, User: profile}})
 
-	token := genToken(device.UserID, device.User.RoleID)
-	profile := toProfile(&device.User)
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "登录成功", "data": LoginResp{Token: token, User: profile}})
+	} else {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+	}
 }
 
 // CreateUserReq 添加用户请求
