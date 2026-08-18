@@ -112,7 +112,13 @@ func RegisterDevice(c *gin.Context) {
 	}
 	err := database.DB.Where("serial = ?", req.Serial).First(&device).Error
 	if err == nil {
-		database.DB.Model(&device).Updates(map[string]interface{}{"market_name": market_name, "last_login_ip": client_ip, "user_id": uid, "user_name": req.Username})
+		if uid != 0 {
+			database.DB.Model(&device).Updates(map[string]interface{}{"market_name": market_name, "last_login_ip": client_ip, "user_id": uid, "username": req.Username})
+
+		} else {
+			database.DB.Model(&device).Updates(map[string]interface{}{"market_name": market_name, "last_login_ip": client_ip})
+
+		}
 
 		var expireUnix int64
 		if device.ExpireAt != nil {
