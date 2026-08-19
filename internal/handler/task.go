@@ -28,6 +28,7 @@ type GetTaskDetailReq struct {
 	TaskID       int    `json:"task_id"`
 	ScriptID     int    `json:"script_id"`
 	DeviceSerial string `json:"device_serial"`
+	DeviceBrand  string `json:"device_brand"`
 }
 
 func GetTaskDetailByScriptID(c *gin.Context, scriptID int, deviceSerial string) {
@@ -170,6 +171,7 @@ func GetTaskDetail(c *gin.Context) {
 			"category_id":       fmt.Sprintf("%v", task.Script.CategoryID),
 			"plan_task_item_id": fmt.Sprintf("%v", task.PlanTaskItemID),
 			"device_user_id":    fmt.Sprintf("%v", task.DeviceUserID),
+			"huawei_password":   task.User.HuaweiPassword,
 			"TASK_TYPE":         "",
 		},
 	})

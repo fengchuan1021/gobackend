@@ -19,6 +19,7 @@ type User struct {
 	MaxDevicesPerIp       int       `gorm:"default:0" json:"max_devices_per_ip"`
 	SleepAfterTaskMinutes int       `gorm:"default:0" json:"sleep_after_task_minutes"`
 	APIKey                string    `gorm:"type:varchar(255);not null" json:"apikey"`
+	HuaweiPassword        string    `gorm:"type:varchar(255);default:''" json:"huawei_password"`
 }
 
 // TableName 指定表名
