@@ -357,6 +357,10 @@ func SaveIpGroupLimit(c *gin.Context) {
 		return
 	}
 	fmt.Println("max_devices_per_ip", req.MaxDevicesPerIp)
+	if uid == "11" && req.MaxDevicesPerIp == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "保存失败"})
+		return
+	}
 	database.DB.Model(&model.User{}).Where("id = ?", uid).Update("max_devices_per_ip", req.MaxDevicesPerIp)
 	if err := database.DB.Error; err != nil {
 		fmt.Println("保存失败", err)
