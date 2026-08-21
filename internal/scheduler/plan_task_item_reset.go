@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -89,8 +90,10 @@ func ResetPlanTaskItemLeftRounds() error {
 		return nil
 	}
 
+	db := database.DB.Debug()
+
 	var devicePlanTasks []model.DevicePlanTask
-	if err := database.DB.
+	if err := db.
 		Joins("JOIN devices ON devices.id = device_plan_tasks.device_id").
 		Where("devices.expire_at > ?", time.Now()).
 		Find(&devicePlanTasks).Error; err != nil {
@@ -118,7 +121,7 @@ func ResetPlanTaskItemLeftRounds() error {
 	}
 
 	var items []model.PlanTaskItem
-	if err := database.DB.Where("plan_task_id IN ?", planTaskIDs).Find(&items).Error; err != nil {
+	if err := db.Where("plan_task_id IN ?", planTaskIDs).Find(&items).Error; err != nil {
 		return err
 	}
 	itemsByPlan := make(map[uint][]model.PlanTaskItem, len(planTaskIDs))
@@ -129,7 +132,7 @@ func ResetPlanTaskItemLeftRounds() error {
 	profilesBySerial := make(map[string][]uint, len(serials))
 	if len(serials) > 0 {
 		var devices []model.Device
-		if err := database.DB.Select("serial", "is_svip").Where("serial IN ?", serials).Find(&devices).Error; err != nil {
+		if err := db.Select("serial", "is_svip").Where("serial IN ?", serials).Find(&devices).Error; err != nil {
 			return err
 		}
 		svipSerials := make([]string, 0, len(devices))
@@ -142,7 +145,7 @@ func ResetPlanTaskItemLeftRounds() error {
 		}
 		if len(svipSerials) > 0 {
 			var profiles []model.DeviceUserProfile
-			if err := database.DB.Where("device_serial IN ?", svipSerials).Find(&profiles).Error; err != nil {
+			if err := db.Where("device_serial IN ?", svipSerials).Find(&profiles).Error; err != nil {
 				return err
 			}
 			for _, p := range profiles {
@@ -176,11 +179,13 @@ func ResetPlanTaskItemLeftRounds() error {
 				continue
 			}
 			totalRound := item.TotalRound
+			fmt.Println("totalRound", totalRound)
 			if totalRound <= 0 {
+				fmt.Println("totalRound <= 0", totalRound)
 				totalRound = 1
 			}
 			for _, deviceUserID := range deviceUserIDs {
-				key := udpserver.DeviceScriptLeftRoundKey(dpt.DeviceID, item.ScriptID, deviceUserID)
+				key := udpserver.DevicePlanTaskScriptLeftRoundKey(dpt.DeviceID, item.ScriptID, deviceUserID, item.ID)
 				pipe.Set(ctx, key, totalRound, 0)
 				batchCount++
 				totalCount++
