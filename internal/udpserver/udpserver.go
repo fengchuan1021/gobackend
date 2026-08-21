@@ -433,8 +433,9 @@ func checkPlanTask(device *model.Device, idleSeconds int, ip string) {
 		//fmt.Printf("checkPlanTask get devicePlanTasks failed err=%v\n", err)
 		return
 	}
+	fmt.Println("device.id=%d,user.id=%d,device.serial=%s", device.ID, device.UserID, device.Serial)
 	if len(devicePlanTasks) == 0 {
-		fmt.Printf("checkPlanTask devicePlanTasks is empty\n")
+		fmt.Printf("checkPlanTask device.serial=%s devicePlanTasks is empty\n", device.Serial)
 		return
 	}
 	planTaskIDs := make([]uint, 0, len(devicePlanTasks))
