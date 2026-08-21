@@ -12,6 +12,7 @@ type CrontabTask struct {
 	UserID         uint      `gorm:"index;not null" json:"user_id"`
 	Name           string    `gorm:"type:varchar(255);default:''" json:"name"`
 	TaskID         int       `gorm:"index;not null" json:"task_id"` // 对应 tasks.id
+	PackageName    string    `gorm:"type:varchar(255);default:''" json:"package_name"`
 	TimeRangeStart time.Time `gorm:"type:time;index;not null" json:"-"`
 	TimeRangeEnd   time.Time `gorm:"type:time;not null" json:"-"`
 	Enabled        bool      `gorm:"default:true;index" json:"enabled"`

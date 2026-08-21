@@ -12,8 +12,9 @@ import (
 
 // crontabTaskClientItem 设备端 listCrontabTasks 返回项
 type crontabTaskClientItem struct {
-	TimeRange []int `json:"time_range"`
-	TaskID    int   `json:"task_id"`
+	TimeRange   []int  `json:"time_range"`
+	TaskID      int    `json:"task_id"`
+	PackageName string `json:"package_name"`
 }
 
 type saveCrontabTaskReq struct {
@@ -65,8 +66,9 @@ func ListCrontabTasks(c *gin.Context) {
 	out := make([]crontabTaskClientItem, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, crontabTaskClientItem{
-			TimeRange: r.TimeRangeMinutes(),
-			TaskID:    r.TaskID,
+			TimeRange:   r.TimeRangeMinutes(),
+			TaskID:      r.TaskID,
+			PackageName: r.PackageName,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": out})
