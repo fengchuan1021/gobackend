@@ -16,7 +16,8 @@ type crontabTaskClientItem struct {
 	TaskID      int    `json:"task_id"`
 	PackageName string `json:"package_name"`
 }
-
+type gameKeywordClientItem struct {
+}
 type saveCrontabTaskReq struct {
 	ID             uint   `json:"id"`
 	Name           string `json:"name"`
@@ -63,6 +64,15 @@ func ListCrontabTasks(c *gin.Context) {
 		return
 	}
 
+	var row2 []model.GameKeywords
+	var out2 [][2]string
+	if err := database.DB.Find(&row2).Error; err == nil {
+		out2 = make([][2]string, 0, len(row2))
+		for _, r := range row2 {
+			out2 = append(out2, [2]string{r.Keyword, r.CategoryName})
+		}
+	}
+
 	out := make([]crontabTaskClientItem, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, crontabTaskClientItem{
@@ -71,7 +81,7 @@ func ListCrontabTasks(c *gin.Context) {
 			PackageName: r.PackageName,
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": out})
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "crontab_tasks": out, "gamekeywords": out2})
 }
 
 // ListCrontabTasksAdmin 管理端完整列表
