@@ -481,6 +481,7 @@ func GetUserConfig(c *gin.Context) {
 		"msg": "获取成功",
 		"data": gin.H{
 			"sleep_after_task_minutes": user.SleepAfterTaskMinutes,
+			"scrcpy_ip":                user.ScrcpyIP,
 		},
 	})
 }

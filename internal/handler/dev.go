@@ -148,3 +148,34 @@ func GetXmlLayout(c *gin.Context) {
 	}
 	c.String(http.StatusOK, string(data))
 }
+func SendScrcpyCmd(c *gin.Context) {
+	serial := c.Query("serial")
+	cmdtype := c.Query("cmdtype")
+	if serial == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serial 参数必填"})
+		return
+	}
+	if cmdtype == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cmdtype 参数必填"})
+		return
+	}
+	if cmdtype == "beginScrcpy" {
+		data, err := udpserver.SendCommand(serial, udpserver.CmdBeginScrcpy, nil, 0)
+		if err != nil {
+			fmt.Println("BeginScrcpy error:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "开始 Scrcpy 失败: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": string(data)})
+	}
+	if cmdtype == "endScrcpy" {
+		data, err := udpserver.SendCommand(serial, udpserver.CmdEndScrcpy, nil, 0)
+		if err != nil {
+			fmt.Println("EndScrcpy error:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "结束 Scrcpy 失败: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": string(data)})
+	}
+
+}

@@ -20,6 +20,7 @@ type User struct {
 	SleepAfterTaskMinutes int       `gorm:"default:0" json:"sleep_after_task_minutes"`
 	APIKey                string    `gorm:"type:varchar(255);not null" json:"apikey"`
 	HuaweiPassword        string    `gorm:"type:varchar(255);default:''" json:"huawei_password"`
+	ScrcpyIP              string    `gorm:"type:varchar(255);default:''" json:"scrcpy_ip"`
 }
 
 // TableName 指定表名
