@@ -81,6 +81,7 @@ type ScriptListItem struct {
 	IsInMiMarket     bool   `json:"is_in_mi_market"`
 	IsInNetdisk      bool   `json:"is_in_netdisk"`
 	IsVirtualPackage bool   `json:"is_virtual_package"`
+	Params           string `json:"params"`
 }
 
 // CategoryWithScripts 分类及其脚本树节点
@@ -103,7 +104,7 @@ func GetScriptsTree(c *gin.Context) {
 		var scripts []model.Script
 		// 排除 content 字段，不加载到内存
 		err := database.DB.Model(&model.Script{}).
-			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market", "is_in_netdisk", "is_virtual_package").
+			Select("id", "name", "icon_url", "category_id", "description", "created_at", "updated_at", "package_name", "is_in_mi_market", "is_in_netdisk", "is_virtual_package", "params").
 			Where("category_id = ?", cat.ID).Order("sort_order desc").
 			Find(&scripts).Error
 		if err != nil {
@@ -123,6 +124,7 @@ func GetScriptsTree(c *gin.Context) {
 				IsInMiMarket:     s.IsInMiMarket,
 				IsInNetdisk:      s.IsInNetdisk,
 				IsVirtualPackage: s.IsVirtualPackage,
+				Params:           s.Params,
 			})
 		}
 
@@ -153,7 +155,7 @@ func GetScript(c *gin.Context) {
 // ListScripts 脚本列表（管理端，不含 content）
 func ListScripts(c *gin.Context) {
 	var list []model.Script
-	err := database.DB.Select("id", "name", "icon_url", "category_id", "description", "package_name", "created_at", "updated_at", "is_in_mi_market", "is_in_netdisk").
+	err := database.DB.Select("id", "name", "icon_url", "category_id", "description", "package_name", "created_at", "updated_at", "is_in_mi_market", "is_in_netdisk", "params").
 		Order("id desc").Find(&list).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
@@ -218,6 +220,7 @@ type CreateScriptReq struct {
 	FilePath    string `json:"file_path"`
 	PackageName string `json:"package_name"`
 	IconURL     string `json:"icon_url"`
+	Params      string `json:"params"`
 }
 
 // CreateScript 创建脚本
@@ -234,6 +237,7 @@ func CreateScript(c *gin.Context) {
 		FilePath:    req.FilePath,
 		PackageName: req.PackageName,
 		IconURL:     req.IconURL,
+		Params:      req.Params,
 	}
 	if err := database.DB.Create(&s).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})

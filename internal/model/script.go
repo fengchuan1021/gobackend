@@ -22,6 +22,7 @@ type Script struct {
 	IsVirtualPackage bool           `gorm:"default:false" json:"is_virtual_package"` // 不用安装app
 	SortOrder        int            `gorm:"index;default:0" json:"sort_order"`
 	MaxDevicesPerIp  int            `gorm:"default:0" json:"max_devices_per_ip"`
+	Params           string         `gorm:"type:varchar(2048)" json:"params"`
 }
 
 // TableName 指定表名

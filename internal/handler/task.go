@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -177,13 +178,50 @@ func GetTaskDetail(c *gin.Context) {
 	})
 }
 
+// ScriptParamsList 与 script_ids 一一对应的配置数组。
+// 兼容旧客户端：若传入对象，则视为只有一项。
+type ScriptParamsList []map[string]interface{}
+
+func (p *ScriptParamsList) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		*p = ScriptParamsList{}
+		return nil
+	}
+	if data[0] == '[' {
+		var arr []map[string]interface{}
+		if err := json.Unmarshal(data, &arr); err != nil {
+			return err
+		}
+		*p = arr
+		return nil
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	*p = ScriptParamsList{obj}
+	return nil
+}
+
+func marshalTaskArgs(m map[string]interface{}) (string, error) {
+	if m == nil {
+		m = map[string]interface{}{}
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 type ClientAddTaskReq struct {
-	ScriptIDs    []int                  `json:"script_ids" binding:"required"`
-	Time         int                    `json:"time" binding:"required"`
-	Rounds       int                    `json:"rounds" binding:"required"`
-	Params       map[string]interface{} `json:"params" binding:"required"`
-	Serials      []string               `json:"serials" binding:"required"`
-	DeviceUserID string                 `json:"device_user_id"`
+	ScriptIDs    []int            `json:"script_ids" binding:"required"`
+	Time         int              `json:"time" binding:"required"`
+	Rounds       int              `json:"rounds" binding:"required"`
+	Params       ScriptParamsList `json:"params" binding:"required"`
+	Serials      []string         `json:"serials" binding:"required"`
+	DeviceUserID string           `json:"device_user_id"`
 }
 
 func ClientAddTask(c *gin.Context) {
@@ -211,15 +249,11 @@ func ClientAddTask(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "输入不正确"})
 		return
 	}
-	argsBytes, err := json.Marshal(req.Params)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
+	if len(req.Params) != len(req.ScriptIDs) {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "params 数量与脚本数量不一致"})
 		return
 	}
 
-	argsStr := string(argsBytes)
-
-	//argsStr := ""
 	if len(req.Serials) <= 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "序列号未填"})
 		return
@@ -250,12 +284,18 @@ func ClientAddTask(c *gin.Context) {
 			continue
 		}
 		var task model.Task
-		//random shuffle scriptIDs
+		//random shuffle scriptIDs，params 同步打乱以保持一一对应
 		rand.Shuffle(len(req.ScriptIDs), func(i, j int) {
 			req.ScriptIDs[i], req.ScriptIDs[j] = req.ScriptIDs[j], req.ScriptIDs[i]
+			req.Params[i], req.Params[j] = req.Params[j], req.Params[i]
 		})
 
-		for _, scriptID := range req.ScriptIDs {
+		for i, scriptID := range req.ScriptIDs {
+			argsStr, err := marshalTaskArgs(req.Params[i])
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
+				return
+			}
 
 			task = model.Task{
 				UserID:       device.UserID,
@@ -323,15 +363,11 @@ func ClientAddSubTask(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "输入不正确"})
 		return
 	}
-	argsBytes, err := json.Marshal(req.Params)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
+	if len(req.Params) != len(req.ScriptIDs) {
+		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "params 数量与脚本数量不一致"})
 		return
 	}
 
-	argsStr := string(argsBytes)
-
-	//argsStr := ""
 	if len(req.Serials) <= 0 {
 		c.JSON(http.StatusOK, gin.H{"code": 500, "msg": "序列号未填"})
 		return
@@ -351,7 +387,12 @@ func ClientAddSubTask(c *gin.Context) {
 		}
 		var task model.Task
 
-		for _, scriptID := range req.ScriptIDs {
+		for i, scriptID := range req.ScriptIDs {
+			argsStr, err := marshalTaskArgs(req.Params[i])
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": -1, "msg": "invalid params"})
+				return
+			}
 			task = model.Task{
 				UserID:       device.UserID,
 				DeviceID:     device.ID,
