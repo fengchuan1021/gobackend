@@ -523,7 +523,7 @@ func GetWhitelistApps(c *gin.Context) {
 	// 写入 Redis，10 分钟有效期
 	if database.RDB != nil {
 		if b, err := json.Marshal(apps); err == nil {
-			_ = database.RDB.Set(ctx, cacheKey, b, 10*time.Minute).Err()
+			_ = database.RDB.Set(ctx, cacheKey, b, 60*time.Minute).Err()
 		}
 	}
 
