@@ -278,6 +278,27 @@ func cloneUDPAddr(a *net.UDPAddr) *net.UDPAddr {
 	return &b
 }
 
+// FindSerialByIP 根据心跳里的设备 IP 反查 gobackend 序列号。
+func FindSerialByIP(ip string) string {
+	if ip == "" {
+		return ""
+	}
+	clientsMu.RLock()
+	defer clientsMu.RUnlock()
+	var best string
+	var bestAt time.Time
+	for serial, ci := range clients {
+		if ci == nil || ci.Ip != ip {
+			continue
+		}
+		if best == "" || ci.LastHeartbeat.After(bestAt) {
+			best = serial
+			bestAt = ci.LastHeartbeat
+		}
+	}
+	return best
+}
+
 func registerHeartbeatClient(job *heartbeatJob) {
 	if job.serial == "" {
 		return

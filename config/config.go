@@ -41,9 +41,10 @@ type RedisConfig struct {
 }
 
 type ServerConfig struct {
-	Port    string
-	UDPPort int
-	Mode    string
+	Port          string
+	UDPPort       int
+	ScrcpyUDPPort int
+	Mode          string
 }
 
 func Load(env string) error {
@@ -85,9 +86,10 @@ func Load(env string) error {
 			DB:       redisDB,
 		},
 		Server: ServerConfig{
-			Port:    getEnv("SERVER_PORT", "8080"),
-			UDPPort: getEnvInt("UDP_PORT", 8080),
-			Mode:    getEnv("GIN_MODE", "debug"),
+			Port:          getEnv("SERVER_PORT", "8080"),
+			UDPPort:       getEnvInt("UDP_PORT", 8080),
+			ScrcpyUDPPort: getEnvInt("SCRCPY_UDP_PORT", 27183),
+			Mode:          getEnv("GIN_MODE", "debug"),
 		},
 		DeepSeek: DeepSeekConfig{
 			APIKey: getEnv("DEEPSEEK_API_KEY", ""),

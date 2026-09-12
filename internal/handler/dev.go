@@ -12,6 +12,7 @@ import (
 
 	"gobackend/internal/database"
 	"gobackend/internal/model"
+	"gobackend/internal/scrcpyudp"
 	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
@@ -160,6 +161,7 @@ func SendScrcpyCmd(c *gin.Context) {
 		return
 	}
 	if cmdtype == "beginScrcpy" {
+		scrcpyudp.ExpectSerial(serial)
 		data, err := udpserver.SendCommand(serial, udpserver.CmdBeginScrcpy, nil, 0)
 		if err != nil {
 			fmt.Println("BeginScrcpy error:", err)

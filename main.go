@@ -12,6 +12,7 @@ import (
 	"gobackend/internal/model"
 	"gobackend/internal/model/third"
 	"gobackend/internal/scheduler"
+	"gobackend/internal/scrcpyudp"
 	"gobackend/internal/udpserver"
 	"gobackend/internal/websocket"
 
@@ -181,6 +182,7 @@ func main() {
 		// 设备凭 script_id 拉取脚本内容，无鉴权（script_id 不可猜测且 20s 过期）
 		api.POST("/dev/getDevScriptContent/:id", handler.GetDevScriptContent)
 		api.POST("/dev/sendScrcpyCmd", handler.SendScrcpyCmd)
+		api.GET("/dev/scrcpyWs", handler.ScrcpyWs)
 
 		dev := api.Group("/dev", middleware.Auth)
 		{
@@ -198,6 +200,7 @@ func main() {
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
 	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
 	go udpserver.Run(config.Cfg.Server.UDPPort)
+	go scrcpyudp.Run(config.Cfg.Server.ScrcpyUDPPort)
 	addr := ":" + config.Cfg.Server.Port
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
