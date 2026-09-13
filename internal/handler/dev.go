@@ -149,6 +149,34 @@ func GetXmlLayout(c *gin.Context) {
 	}
 	c.String(http.StatusOK, string(data))
 }
+
+// RunShellReq 在设备上以 root 执行一条 shell
+type RunShellReq struct {
+	Serial  string `json:"serial" binding:"required"`
+	Command string `json:"command" binding:"required"`
+}
+
+// RunShell 通过 UDP ExecuteCommand 让 antares 执行命令并返回输出
+// POST /api/dev/runShell
+func RunShell(c *gin.Context) {
+	var req RunShellReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，需 serial 与 command"})
+		return
+	}
+	if req.Serial == "" || req.Command == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serial 与 command 必填"})
+		return
+	}
+	data, err := udpserver.SendCommand(req.Serial, udpserver.CmdExecuteCommand, []byte(req.Command), 0)
+	if err != nil {
+		fmt.Println("RunShell error:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "执行命令失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": string(data)})
+}
+
 func SendScrcpyCmd(c *gin.Context) {
 	serial := c.Query("serial")
 	cmdtype := c.Query("cmdtype")

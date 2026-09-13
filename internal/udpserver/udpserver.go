@@ -917,8 +917,12 @@ func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]
 	pending.Store(msgID, ch)
 	defer pending.Delete(msgID)
 
-	const respTimeout = 6 * time.Second
-	const maxRetries = 4
+	respTimeout := 6 * time.Second
+	maxRetries := 4
+	if cmdType == CmdExecuteCommand {
+		respTimeout = 60 * time.Second
+		maxRetries = 1
+	}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		pkt := buildPacket(cmdType, msgID, payload)

@@ -53,8 +53,15 @@ func ScrcpyWs(c *gin.Context) {
 	go func() {
 		defer close(done)
 		for {
-			if _, _, err := conn.ReadMessage(); err != nil {
+			msgType, data, err := conn.ReadMessage()
+			if err != nil {
 				return
+			}
+			if msgType != websocket.BinaryMessage || len(data) == 0 {
+				continue
+			}
+			if err := scrcpyudp.SendControl(serial, data); err != nil {
+				log.Printf("scrcpy control serial=%s: %v", serial, err)
 			}
 		}
 	}()

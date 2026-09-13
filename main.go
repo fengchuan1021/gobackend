@@ -190,6 +190,7 @@ func main() {
 			dev.GET("/getScreenShot", handler.GetScreenShot)
 			dev.GET("/getXmlLayout", handler.GetXmlLayout)
 			dev.POST("/runDevScript", handler.RunDevScript)
+			dev.POST("/runShell", handler.RunShell)
 		}
 		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
 		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)

@@ -2,6 +2,7 @@ package scrcpyudp
 
 import (
 	"encoding/binary"
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -83,14 +84,15 @@ func (s *Subscriber) C() <-chan []byte {
 }
 
 type peer struct {
-	addr       *net.UDPAddr
-	name       string
-	serial     string
-	lastRx     time.Time
-	videoAsm   reassembly
-	codecPkt   []byte
-	sessionPkt []byte
-	configPkt  []byte
+	addr        *net.UDPAddr
+	name        string
+	serial      string
+	lastRx      time.Time
+	videoAsm    reassembly
+	codecPkt    []byte
+	sessionPkt  []byte
+	configPkt   []byte
+	sendFrameID uint32
 }
 
 type reassembly struct {
@@ -523,6 +525,72 @@ func clone(b []byte) []byte {
 	out := make([]byte, len(b))
 	copy(out, b)
 	return out
+}
+
+func (s *Server) SendControl(serial string, payload []byte) error {
+	if serial == "" {
+		return fmt.Errorf("serial required")
+	}
+	if len(payload) == 0 || len(payload) > MaxFrame {
+		return fmt.Errorf("invalid control payload")
+	}
+	s.mu.Lock()
+	p := s.serials[serial]
+	if p == nil || p.addr == nil {
+		s.mu.Unlock()
+		return fmt.Errorf("device %s not streaming", serial)
+	}
+	addr := p.addr
+	frameID := p.sendFrameID
+	p.sendFrameID++
+	conn := s.conn
+	s.mu.Unlock()
+	if conn == nil {
+		return fmt.Errorf("scrcpyudp not listening")
+	}
+	return writeControl(conn, addr, frameID, payload)
+}
+
+func writeControl(conn *net.UDPConn, addr *net.UDPAddr, frameID uint32, payload []byte) error {
+	fragCount := 1
+	if len(payload) > 0 {
+		fragCount = (len(payload) + MaxPayload - 1) / MaxPayload
+	}
+	if fragCount < 1 {
+		fragCount = 1
+	}
+	off := 0
+	for i := 0; i < fragCount; i++ {
+		n := 0
+		if off < len(payload) {
+			n = len(payload) - off
+			if n > MaxPayload {
+				n = MaxPayload
+			}
+		}
+		pkt := make([]byte, HeaderSize+n)
+		binary.BigEndian.PutUint32(pkt[0:4], Magic)
+		pkt[4] = TypeControl
+		binary.BigEndian.PutUint32(pkt[6:10], frameID)
+		binary.BigEndian.PutUint16(pkt[10:12], uint16(i))
+		binary.BigEndian.PutUint16(pkt[12:14], uint16(fragCount))
+		binary.BigEndian.PutUint16(pkt[14:16], uint16(n))
+		if n > 0 {
+			copy(pkt[HeaderSize:], payload[off:off+n])
+			off += n
+		}
+		if _, err := conn.WriteToUDP(pkt, addr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func SendControl(serial string, payload []byte) error {
+	if Default == nil {
+		return fmt.Errorf("scrcpyudp not started")
+	}
+	return Default.SendControl(serial, payload)
 }
 
 func Subscribe(serial string) *Subscriber {
