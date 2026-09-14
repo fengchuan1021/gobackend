@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	appIconDir = "images/appicon"
+	appIconDir   = "images/appicon"
+	debugApkPath = "/root/snake/antares/app/build/outputs/apk/debug/app-debug.apk"
 )
 
 var wwwrootDir string
@@ -194,6 +195,19 @@ func GetAppVersion(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "version": cfg.Value})
 }
+
+func GetDebugApk(c *gin.Context) {
+	if _, err := os.Stat(debugApkPath); err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "debug apk 不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 debug apk 失败"})
+		return
+	}
+	c.FileAttachment(debugApkPath, "app-debug.apk")
+}
+
 func GetEssentialApps(c *gin.Context) {
 	var apps []model.Application
 	err := database.DB.Select("package_name", "download_url", "apk_version").Where("is_essential = 1").Find(&apps).Error
