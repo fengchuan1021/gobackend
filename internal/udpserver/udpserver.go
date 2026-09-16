@@ -897,16 +897,16 @@ func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]
 		return nil, fmt.Errorf("UDP server not ready")
 	}
 	if cmdType == CmdRunTaskScript {
-		count, err := RunningTaskDeviceCount(context.Background(), userID, udpAddr.IP.String())
-		if err != nil {
-			fmt.Printf("get running task device count failed uid=%d ip=%s err=%v\n", userID, udpAddr.IP.String(), err)
-			return nil, fmt.Errorf("get running task device count failed uid=%d ip=%s err=%v", userID, udpAddr.IP.String(), err)
-		}
+		// count, err := RunningTaskDeviceCount(context.Background(), userID, udpAddr.IP.String())
+		// if err != nil {
+		// 	fmt.Printf("get running task device count failed uid=%d ip=%s err=%v\n", userID, udpAddr.IP.String(), err)
+		// 	return nil, fmt.Errorf("get running task device count failed uid=%d ip=%s err=%v", userID, udpAddr.IP.String(), err)
+		// }
 
-		if device.User.MaxDevicesPerIp > 0 && count >= int64(device.User.MaxDevicesPerIp) {
-			fmt.Printf("running task device count is too many uid=%d ip=%s count=%d max=%d\n", userID, udpAddr.IP.String(), count, device.User.MaxDevicesPerIp)
-			return nil, fmt.Errorf("running task device count is too many uid=%d ip=%s count=%d max=%d", userID, udpAddr.IP.String(), count, device.User.MaxDevicesPerIp)
-		}
+		// if device.User.MaxDevicesPerIp > 0 && count >= int64(device.User.MaxDevicesPerIp) {
+		// 	fmt.Printf("running task device count is too many uid=%d ip=%s count=%d max=%d\n", userID, udpAddr.IP.String(), count, device.User.MaxDevicesPerIp)
+		// 	return nil, fmt.Errorf("running task device count is too many uid=%d ip=%s count=%d max=%d", userID, udpAddr.IP.String(), count, device.User.MaxDevicesPerIp)
+		// }
 		if err := upsertRunningDeviceInRedis(context.Background(), userID, udpAddr.IP.String(), serial); err != nil {
 			fmt.Printf("upsert running device failed uid=%d ip=%s serial=%s err=%v\n", userID, udpAddr.IP.String(), serial, err)
 			return nil, fmt.Errorf("upsert running device failed uid=%d ip=%s serial=%s err=%v", userID, udpAddr.IP.String(), serial, err)
