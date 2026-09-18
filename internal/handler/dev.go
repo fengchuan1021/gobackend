@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"gobackend/internal/database"
 	"gobackend/internal/model"
 	"gobackend/internal/scrcpyudp"
+	"gobackend/internal/shellstream"
 	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
@@ -175,6 +178,92 @@ func RunShell(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": string(data)})
+}
+
+type RunShellSessionReq struct {
+	Serial  string `json:"serial" binding:"required"`
+	Session string `json:"session" binding:"required"`
+	Op      string `json:"op" binding:"required"`
+	Data    string `json:"data"`
+	Seq     uint32 `json:"seq"`
+}
+
+// RunShellSession 通过 UDP ExecuteShellCommand 操作设备 PTY 会话
+// POST /api/dev/shell
+func RunShellSession(c *gin.Context) {
+	var req RunShellSessionReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误，需 serial、session、op"})
+		return
+	}
+	if req.Serial == "" || req.Session == "" || req.Op == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serial、session、op 必填"})
+		return
+	}
+	payload, err := json.Marshal(map[string]interface{}{
+		"op":      req.Op,
+		"session": req.Session,
+		"data":    req.Data,
+		"seq":     req.Seq,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "编码失败"})
+		return
+	}
+	data, err := udpserver.SendCommand(req.Serial, udpserver.CmdExecuteShellCommand, payload, 0)
+	if err != nil {
+		fmt.Println("RunShellSession error:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "执行失败: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": string(data)})
+}
+
+// ShellStream 订阅设备 PTY 输出（SSE）
+// GET /api/dev/shellStream?serial=&session=
+func ShellStream(c *gin.Context) {
+	serial := c.Query("serial")
+	session := c.Query("session")
+	if serial == "" || session == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "serial 与 session 必填"})
+		return
+	}
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "不支持流式响应"})
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+	flusher.Flush()
+
+	ch := shellstream.Default.Subscribe(serial, session)
+	defer shellstream.Default.Unsubscribe(serial, session, ch)
+
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			if _, err := io.WriteString(c.Writer, "data: "+msg+"\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeat.C:
+			if _, err := io.WriteString(c.Writer, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 func SendScrcpyCmd(c *gin.Context) {

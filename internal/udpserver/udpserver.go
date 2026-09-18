@@ -27,23 +27,24 @@ const (
 )
 
 const (
-	Magic               = 0x53434F52 // "SCOR"
-	HeaderSize          = 16
-	CmdHeartbeat        = 0
-	CmdGetScreenshot    = 1
-	CmdGetXmlLayout     = 2
-	CmdSetToken         = 3
-	CmdExecuteCommand   = 4
-	CmdAck              = 5
-	CmdExecuteDevScript = 6
-	CmdRunTaskScript    = 7
-	CmdStopTask         = 8
-	CmdBackupApps       = 9
-	CmdResetDevice      = 10
-	CmdReboot           = 11
-	CmdPauseTask        = 12
-	CmdBeginScrcpy      = 13
-	CmdEndScrcpy        = 14
+	Magic                  = 0x53434F52 // "SCOR"
+	HeaderSize             = 16
+	CmdHeartbeat           = 0
+	CmdGetScreenshot       = 1
+	CmdGetXmlLayout        = 2
+	CmdSetToken            = 3
+	CmdExecuteCommand      = 4
+	CmdAck                 = 5
+	CmdExecuteDevScript    = 6
+	CmdRunTaskScript       = 7
+	CmdStopTask            = 8
+	CmdBackupApps          = 9
+	CmdResetDevice         = 10
+	CmdReboot              = 11
+	CmdPauseTask           = 12
+	CmdBeginScrcpy         = 13
+	CmdEndScrcpy           = 14
+	CmdExecuteShellCommand = 15
 )
 
 type ConnInfo struct {
@@ -922,6 +923,10 @@ func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]
 	if cmdType == CmdExecuteCommand {
 		respTimeout = 60 * time.Second
 		maxRetries = 1
+	}
+	if cmdType == CmdExecuteShellCommand {
+		respTimeout = 8 * time.Second
+		maxRetries = 2
 	}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {

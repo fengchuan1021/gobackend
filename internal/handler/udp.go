@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
+	"gobackend/internal/shellstream"
 	"gobackend/internal/udpserver"
 
 	"github.com/gin-gonic/gin"
@@ -39,4 +41,33 @@ func CmdCallback(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, gin.H{"code": -1, "msg": "msg_id 无效或已超时"})
 	}
+}
+
+type ShellOutputReq struct {
+	Serial  string `json:"serial" binding:"required"`
+	Session string `json:"session" binding:"required"`
+	Type    string `json:"type"`
+	Data    string `json:"data"`
+	Cwd     string `json:"cwd"`
+	Seq     uint32 `json:"seq"`
+}
+
+// ShellOutput 设备 PTY 输出回调，转给前端 SSE
+// POST /api/udp/shelloutput
+func ShellOutput(c *gin.Context) {
+	var req ShellOutputReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if req.Type == "" {
+		req.Type = "out"
+	}
+	msg, err := json.Marshal(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "编码失败"})
+		return
+	}
+	shellstream.Default.Publish(req.Serial, req.Session, string(msg))
+	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "ok"})
 }

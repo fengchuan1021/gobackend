@@ -180,6 +180,7 @@ func main() {
 		api.POST("/task/clientFinishTask", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.ClientFinishTask)
 		api.POST("/task/executionStats", middleware.Auth, handler.GetTaskExecutionStats)
 		api.POST("/udp/cmdcallback", handler.CmdCallback)
+		api.POST("/udp/shelloutput", handler.ShellOutput)
 		// 设备凭 script_id 拉取脚本内容，无鉴权（script_id 不可猜测且 20s 过期）
 		api.POST("/dev/getDevScriptContent/:id", handler.GetDevScriptContent)
 		api.POST("/dev/sendScrcpyCmd", handler.SendScrcpyCmd)
@@ -192,6 +193,8 @@ func main() {
 			dev.GET("/getXmlLayout", handler.GetXmlLayout)
 			dev.POST("/runDevScript", handler.RunDevScript)
 			dev.POST("/runShell", handler.RunShell)
+			dev.POST("/shell", handler.RunShellSession)
+			dev.GET("/shellStream", handler.ShellStream)
 		}
 		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
 		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
