@@ -208,7 +208,20 @@ func GetDebugApk(c *gin.Context) {
 	c.FileAttachment(debugApkPath, "app-debug.apk")
 }
 
+type essentialAppsReq struct {
+	IsRedroid bool   `json:"is_redroid"`
+	Brand     string `json:"brand"`
+}
+
 func GetEssentialApps(c *gin.Context) {
+	var req essentialAppsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "参数错误"})
+		return
+	}
+	isRedroid := req.IsRedroid
+	brand := req.Brand
+
 	var apps []model.Application
 	err := database.DB.Select("package_name", "download_url", "apk_version").Where("is_essential = 1").Find(&apps).Error
 	if err != nil {
@@ -224,7 +237,15 @@ func GetEssentialApps(c *gin.Context) {
 			ApkVersion:  a.ApkVersion,
 		})
 	}
-
+	if isRedroid {
+		if brand == "Redmi" {
+			// out = append(out, EssentialAppLite{
+			// 	PackageName: "com.xiaomi.market",
+			// 	DownloadUrl: "https://registry.npmmirror.com/antares_xiaomimarket/-/antares_xiaomimarket-1.0.0.tgz",
+			// 	ApkVersion:  "",
+			// })
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "获取成功", "data": out})
 }
 func InstallRandomApp(c *gin.Context) {

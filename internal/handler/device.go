@@ -479,15 +479,20 @@ func GetAppsCategory(c *gin.Context) {
 // POST /api/device/getwhitelistapps
 func GetWhitelistApps(c *gin.Context) {
 	const cacheKey = "whitelistapps:apps"
-
+	const tmpcacheKey = "whitelistapps:tmpapps"
 	ctx := c.Request.Context()
 
 	// 先从 Redis 读取缓存
 	if database.RDB != nil {
+		var tmpapps []string
+		if tmpcached, tmperr := database.RDB.Get(ctx, tmpcacheKey).Result(); tmperr == nil && tmpcached != "" {
+			json.Unmarshal([]byte(tmpcached), &tmpapps)
+		}
+
 		if cached, err := database.RDB.Get(ctx, cacheKey).Result(); err == nil && cached != "" {
 			var apps []string
 			if err := json.Unmarshal([]byte(cached), &apps); err == nil {
-				c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps})
+				c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps, "tmpwhitelist": tmpapps})
 				return
 			}
 		}
@@ -507,6 +512,11 @@ func GetWhitelistApps(c *gin.Context) {
 	if err := database.DB.Table("applications").Where("whitelist = 1").Pluck("package_name", &appPackages).Error; err == nil {
 		rows = append(rows, appPackages...)
 	}
+	var tmprows []string
+	var tmpPackages []string
+	if err := database.DB.Table("applications").Where("tmp_whitelist = 1").Pluck("package_name", &tmpPackages).Error; err == nil {
+		tmprows = append(tmprows, tmpPackages...)
+	}
 
 	// 去重，并存到 apps
 	appMap := make(map[string]struct{}, len(rows))
@@ -520,14 +530,29 @@ func GetWhitelistApps(c *gin.Context) {
 		apps = append(apps, pkg)
 	}
 
+	// 去重，并存到 apps
+	tmpappMap := make(map[string]struct{}, len(tmprows))
+	for _, pkg := range tmprows {
+		if pkg = strings.TrimSpace(pkg); pkg != "" {
+			tmpappMap[pkg] = struct{}{}
+		}
+	}
+	tmpapps := make([]string, 0, len(tmpappMap))
+	for pkg := range tmpappMap {
+		tmpapps = append(tmpapps, pkg)
+	}
+
 	// 写入 Redis，10 分钟有效期
 	if database.RDB != nil {
 		if b, err := json.Marshal(apps); err == nil {
 			_ = database.RDB.Set(ctx, cacheKey, b, 60*time.Minute).Err()
 		}
+		if b, err := json.Marshal(tmpapps); err == nil {
+			_ = database.RDB.Set(ctx, tmpcacheKey, b, 60*time.Minute).Err()
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": apps, "tmpwhitelist": tmpapps})
 }
 func SaveProfileNote(c *gin.Context) {
 	serial := c.Query("serial")
