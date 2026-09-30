@@ -59,6 +59,7 @@ func main() {
 		&model.CrontabTask{},
 		&model.DeviceUserProfile{},
 		&model.GameKeywords{},
+		&model.RedroidServer{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -201,6 +202,17 @@ func main() {
 		api.POST("/third/uploadQuNaTask", middleware.Auth, handler.UploadQuNaTask)
 		api.POST("/third/getQuNaTaskSummaryList", middleware.Auth, handler.GetQuNaTaskSummaryList)
 
+	}
+	redroid_server := api.Group("/redroid_server", middleware.Auth)
+	{
+		redroid_server.POST("/create", handler.CreateRedroidServer)
+		redroid_server.POST("/update", handler.UpdateRedroidServer)
+		redroid_server.POST("/delete", handler.DeleteRedroidServer)
+		redroid_server.GET("/list", handler.ListRedroidServers)
+		redroid_server.GET("/get", handler.GetRedroidServer)
+		redroid_server.GET("/containers", handler.ListRedroidServerContainers)
+		redroid_server.POST("/container/start", handler.StartRedroidContainer)
+		redroid_server.POST("/container/stop", handler.StopRedroidContainer)
 	}
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
 	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
