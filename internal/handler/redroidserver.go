@@ -24,10 +24,17 @@ import (
 const redroidImage = "127.0.0.1:5000/redroid:latest"
 
 var containerNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+var containerIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{12,64}$`)
 
 type containerActionReq struct {
 	ID   uint   `json:"id"`
 	Name string `json:"name"`
+}
+
+type containerLocationReq struct {
+	Serial    string  `json:"serial"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 }
 
 type saveRedroidServerReq struct {
@@ -44,6 +51,7 @@ type redroidContainer struct {
 	Image   string `json:"image"`
 	Status  string `json:"status"`
 	Running bool   `json:"running"`
+	Serial  string `json:"serial"`
 }
 
 type deleteRedroidServerReq struct {
@@ -324,6 +332,92 @@ func StopRedroidContainer(c *gin.Context) {
 	runRedroidContainerAction(c, "stop")
 }
 
+// GetRedroidContainerLocation 读取容器对应设备在数据库中的经纬度。容器名即设备 serial。
+// GET /api/redroid_server/container/location?serial=
+func GetRedroidContainerLocation(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	serial := strings.TrimSpace(c.Query("serial"))
+	if !containerNamePattern.MatchString(serial) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "容器名称无效"})
+		return
+	}
+
+	var device model.Device
+	err := database.DB.Where("serial = ? AND user_id = ?", serial, uid).First(&device).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "设备不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"serial":    device.Serial,
+			"latitude":  device.Latitude,
+			"longitude": device.Longitude,
+		},
+	})
+}
+
+// UpdateRedroidContainerLocation 只更新设备表中的经纬度，不操作运行中的容器。
+// POST /api/redroid_server/container/location
+func UpdateRedroidContainerLocation(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+
+	var req containerLocationReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	serial := strings.TrimSpace(req.Serial)
+	if !containerNamePattern.MatchString(serial) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "容器名称无效"})
+		return
+	}
+	if req.Latitude < -90 || req.Latitude > 90 || req.Longitude < -180 || req.Longitude > 180 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "经纬度超出范围"})
+		return
+	}
+
+	var device model.Device
+	err := database.DB.Where("serial = ? AND user_id = ?", serial, uid).First(&device).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "设备不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	err = database.DB.Model(&device).Updates(map[string]any{
+		"latitude":  req.Latitude,
+		"longitude": req.Longitude,
+	}).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"serial":    serial,
+			"latitude":  req.Latitude,
+			"longitude": req.Longitude,
+		},
+	})
+}
+
 func runRedroidContainerAction(c *gin.Context, action string) {
 	uid, ok := currentUserID(c)
 	if !ok {
@@ -476,8 +570,31 @@ func listRedroidContainers(ip string) ([]redroidContainer, error) {
 	}
 	defer client.Close()
 
-	cmd := "docker ps -a --filter 'ancestor=" + redroidImage + "' --format '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.State}}'"
-	output, err := runSSH(client, cmd, 15*time.Second)
+	psCmd := "docker ps -aq --filter 'ancestor=" + redroidImage + "'"
+	idsOut, err := runSSH(client, psCmd, 15*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	containerIDs := strings.Fields(idsOut)
+	if len(containerIDs) == 0 {
+		return []redroidContainer{}, nil
+	}
+
+	args := []string{
+		"inspect",
+		"-f",
+		`'{{.Id}}\t{{.Name}}\t{{.Config.Image}}\t{{.State.Status}}\t{{index .Config.Labels "serial"}}'`,
+	}
+	for _, id := range containerIDs {
+		if !containerIDPattern.MatchString(id) {
+			continue
+		}
+		args = append(args, id)
+	}
+	if len(args) == 3 {
+		return []redroidContainer{}, nil
+	}
+	output, err := runSSH(client, "docker "+strings.Join(args, " "), 15*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -531,16 +648,22 @@ func parseRedroidContainers(output string) []redroidContainer {
 		if line == "" {
 			continue
 		}
+		line = strings.ReplaceAll(line, `\t`, "\t")
 		parts := strings.Split(line, "\t")
 		if len(parts) < 5 {
 			continue
 		}
+		serial := parts[4]
+		if serial == "<no value>" {
+			serial = ""
+		}
 		item := redroidContainer{
 			ID:      parts[0],
-			Name:    parts[1],
+			Name:    strings.TrimPrefix(parts[1], "/"),
 			Image:   parts[2],
 			Status:  parts[3],
-			Running: parts[4] == "running",
+			Running: parts[3] == "running",
+			Serial:  serial,
 		}
 		list = append(list, item)
 		if len(list) >= 200 {

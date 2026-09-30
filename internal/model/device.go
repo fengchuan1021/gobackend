@@ -25,6 +25,8 @@ type Device struct {
 	IsSvip        bool        `gorm:"default:false" json:"is_svip"`
 	MarketName    string      `gorm:"type:varchar(32);default:''" json:"market_name"`
 	LastLoginIp   string      `gorm:"type:varchar(32);default:''" json:"last_login_ip"`
+	Latitude      float64     `gorm:"default:0" json:"latitude"`
+	Longitude     float64     `gorm:"default:0" json:"longitude"`
 }
 
 // TableName 指定表名
