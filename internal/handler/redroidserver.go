@@ -332,15 +332,30 @@ func StopRedroidContainer(c *gin.Context) {
 	runRedroidContainerAction(c, "stop")
 }
 
-// GetRedroidContainerLocation 读取容器对应设备在数据库中的经纬度。容器名即设备 serial。
+func locationSerial(c *gin.Context) string {
+	serial := strings.TrimSpace(c.Query("serial"))
+	if serial != "" || c.Request.Method != http.MethodPost {
+		return serial
+	}
+	var req struct {
+		Serial string `json:"serial"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(req.Serial)
+}
+
+// GetRedroidContainerLocation 读取设备在数据库中的经纬度。
 // GET /api/redroid_server/container/location?serial=
+// POST /api/redroid_server/container/postgetlocation  请求体 {"serial":"..."}，供设备端 post2server 加密调用
 func GetRedroidContainerLocation(c *gin.Context) {
 	uid, ok := currentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 		return
 	}
-	serial := strings.TrimSpace(c.Query("serial"))
+	serial := locationSerial(c)
 	if !containerNamePattern.MatchString(serial) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "容器名称无效"})
 		return

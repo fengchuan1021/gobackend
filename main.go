@@ -214,6 +214,7 @@ func main() {
 		redroid_server.POST("/container/start", handler.StartRedroidContainer)
 		redroid_server.POST("/container/stop", handler.StopRedroidContainer)
 		redroid_server.GET("/container/location", handler.GetRedroidContainerLocation)
+		redroid_server.POST("/container/postgetlocation", middleware.AesRequest, middleware.AesResponse, handler.GetRedroidContainerLocation)
 		redroid_server.POST("/container/location", handler.UpdateRedroidContainerLocation)
 	}
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
