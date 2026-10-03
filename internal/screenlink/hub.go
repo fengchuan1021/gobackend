@@ -12,7 +12,7 @@ const (
 	maxQueue    = 32
 	maxMessage  = 256 * 1024
 	sessionTTL  = 5 * time.Minute
-	maxSerial   = 128
+	maxSerial   = 320
 	maxNameRune = 64
 )
 

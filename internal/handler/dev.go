@@ -305,3 +305,49 @@ func SendScreenLinkCmd(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"data": string(data)})
 }
+
+func SendNetCamCmd(c *gin.Context) {
+	sink := strings.TrimSpace(c.Query("serial"))
+	source := strings.TrimSpace(c.Query("peer"))
+	cmdtype := strings.TrimSpace(c.Query("cmdtype"))
+	if sink == "" || source == "" || sink == source || (cmdtype != "begin" && cmdtype != "end") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	room := "netcam:" + sink + ":" + source
+	if len(room) > 320 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "序列号过长"})
+		return
+	}
+	var cmd uint32 = udpserver.CmdEndNetCam
+	var cameraPayload []byte
+	var viewerPayload []byte
+	if cmdtype == "begin" {
+		relay, stun, err := screenLinkAddrs()
+		if err != nil || relay == "" || stun == "" {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "画面配置不完整"})
+			return
+		}
+		cmd = udpserver.CmdBeginNetCam
+		cameraPayload, _ = json.Marshal(map[string]string{
+			"role": "source", "room": room, "peer": sink, "relay": relay, "stun": stun,
+		})
+		viewerPayload, _ = json.Marshal(map[string]string{
+			"role": "sink", "room": room, "peer": source, "relay": relay, "stun": stun,
+		})
+	} else {
+		stopPayload := []byte(`{"action":"stop"}`)
+		cameraPayload = stopPayload
+		viewerPayload = stopPayload
+	}
+	if _, err := udpserver.SendCommand(source, cmd, cameraPayload, 0); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "采集端: " + err.Error()})
+		return
+	}
+	if _, err := udpserver.SendCommand(sink, cmd, viewerPayload, 0); err != nil {
+		_, _ = udpserver.SendCommand(source, udpserver.CmdEndNetCam, []byte(`{"action":"stop"}`), 0)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "接收端: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": room})
+}

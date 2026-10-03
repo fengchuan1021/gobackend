@@ -45,6 +45,8 @@ const (
 	CmdBeginScreenLink     = 13
 	CmdEndScreenLink       = 14
 	CmdExecuteShellCommand = 15
+	CmdBeginNetCam         = 16
+	CmdEndNetCam           = 17
 )
 
 type ConnInfo struct {

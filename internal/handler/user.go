@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"gobackend/internal/database"
@@ -450,6 +451,47 @@ func SaveDeepseekKey(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"msg": "保存成功"})
+}
+
+func SaveNetCamSerial(c *gin.Context) {
+	uid := c.Query("uid")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 uid"})
+		return
+	}
+	var req struct {
+		NetCamSerial string `json:"net_cam_serial"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "参数错误"})
+		return
+	}
+	serial := strings.TrimSpace(req.NetCamSerial)
+	if len(serial) > 255 {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "序列号过长"})
+		return
+	}
+	if err := database.DB.Model(&model.User{}).Where("id = ?", uid).Updates(map[string]interface{}{
+		"net_cam_serial": serial,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"msg": "保存失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "保存成功", "data": serial})
+}
+
+func GetNetCamSerial(c *gin.Context) {
+	uid := c.Query("uid")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": "缺少 uid"})
+		return
+	}
+	var user model.User
+	if err := database.DB.Where("id = ?", uid).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"msg": "用户不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"msg": "获取成功", "data": user.NetCamSerial})
 }
 
 func GetDeepseekKey(c *gin.Context) {

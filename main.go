@@ -145,6 +145,8 @@ func main() {
 		api.GET("/user/get_sleep_after_task", middleware.Auth, handler.GetSleepAfterTask)
 		api.POST("/user/save_deepseek_key", middleware.Auth, handler.SaveDeepseekKey)
 		api.GET("/user/get_deepseek_key", middleware.Auth, handler.GetDeepseekKey)
+		api.POST("/user/save_net_cam_serial", middleware.Auth, handler.SaveNetCamSerial)
+		api.GET("/user/get_net_cam_serial", middleware.Auth, handler.GetNetCamSerial)
 		api.POST("/user/get_user_config", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetUserConfig)
 		api.POST("/get_ip_lock", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.GetIPLock)
 		api.POST("/devices/reset_device/:serial", middleware.Auth, handler.ResetDeviceBySerial)
@@ -199,6 +201,7 @@ func main() {
 			dev.POST("/shell", handler.RunShellSession)
 			dev.GET("/shellStream", handler.ShellStream)
 			dev.POST("/sendScreenLinkCmd", handler.SendScreenLinkCmd)
+			dev.POST("/sendNetCamCmd", handler.SendNetCamCmd)
 		}
 		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
 		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
