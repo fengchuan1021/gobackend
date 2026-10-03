@@ -42,8 +42,8 @@ const (
 	CmdResetDevice         = 10
 	CmdReboot              = 11
 	CmdPauseTask           = 12
-	CmdBeginScrcpy         = 13
-	CmdEndScrcpy           = 14
+	CmdBeginScreenLink     = 13
+	CmdEndScreenLink       = 14
 	CmdExecuteShellCommand = 15
 )
 

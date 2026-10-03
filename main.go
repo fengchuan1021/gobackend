@@ -12,7 +12,7 @@ import (
 	"gobackend/internal/model"
 	"gobackend/internal/model/third"
 	"gobackend/internal/scheduler"
-	"gobackend/internal/scrcpyudp"
+	"gobackend/internal/screenlink"
 	"gobackend/internal/udpserver"
 	"gobackend/internal/websocket"
 
@@ -85,6 +85,9 @@ func main() {
 	websocket.DefaultHub = wsHub
 	go wsHub.Run()
 	r.GET("/ws", websocket.Handle(wsHub))
+	screenHub := screenlink.NewHub()
+	go screenHub.RunSweeper()
+	r.GET("/screenlink", screenlink.Handle(screenHub))
 	api := r.Group("/api")
 
 	{
@@ -94,6 +97,7 @@ func main() {
 		api.POST("/backup/uploadBackup", middleware.Auth, handler.UploadBackup)
 		api.POST("/backup/setProcessStatus", middleware.Auth, middleware.AesRequest, middleware.AesResponse, handler.SetProcessStatus)
 
+		api.GET("/getwebrtcconfig", handler.GetWebRTCConfig)
 		// 该接口由客户端通过 post2serverraw 拉取（不做 AES 处理），因此不挂 AES 中间件。
 		api.POST("/blacklist/listBlacklist", middleware.Auth, handler.ListBlacklist)
 
@@ -184,8 +188,6 @@ func main() {
 		api.POST("/udp/shelloutput", handler.ShellOutput)
 		// 设备凭 script_id 拉取脚本内容，无鉴权（script_id 不可猜测且 20s 过期）
 		api.POST("/dev/getDevScriptContent/:id", handler.GetDevScriptContent)
-		api.POST("/dev/sendScrcpyCmd", handler.SendScrcpyCmd)
-		api.GET("/dev/scrcpyWs", handler.ScrcpyWs)
 
 		dev := api.Group("/dev", middleware.Auth)
 		{
@@ -196,6 +198,7 @@ func main() {
 			dev.POST("/runShell", handler.RunShell)
 			dev.POST("/shell", handler.RunShellSession)
 			dev.GET("/shellStream", handler.ShellStream)
+			dev.POST("/sendScreenLinkCmd", handler.SendScreenLinkCmd)
 		}
 		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
 		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
@@ -220,7 +223,8 @@ func main() {
 	r.Static("/images", config.Cfg.SOLUTION_DIR+"/antares_assets/images")
 	r.Static("/files", config.Cfg.SOLUTION_DIR+"/antares_assets/files")
 	go udpserver.Run(config.Cfg.Server.UDPPort)
-	go scrcpyudp.Run(config.Cfg.Server.ScrcpyUDPPort)
+	go screenlink.RunSTUN()
+
 	addr := ":" + config.Cfg.Server.Port
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("服务启动失败: %v", err)

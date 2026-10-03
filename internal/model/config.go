@@ -4,7 +4,11 @@ import (
 	"time"
 )
 
-const AppVersionConfigKey = "app_version"
+const (
+	AppVersionConfigKey = "app_version"
+	ScreenLinkRelayKey  = "screenlink.relay"
+	ScreenLinkStunKey   = "screenlink.stun"
+)
 
 // Config 配置模型（key-value）
 type Config struct {

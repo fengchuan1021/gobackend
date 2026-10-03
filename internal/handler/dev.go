@@ -10,11 +10,12 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"gobackend/internal/database"
 	"gobackend/internal/model"
-	"gobackend/internal/scrcpyudp"
+
 	"gobackend/internal/shellstream"
 	"gobackend/internal/udpserver"
 
@@ -266,35 +267,41 @@ func ShellStream(c *gin.Context) {
 	}
 }
 
-func SendScrcpyCmd(c *gin.Context) {
-	serial := c.Query("serial")
-	cmdtype := c.Query("cmdtype")
-	if serial == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "serial 参数必填"})
-		return
+func screenLinkAddrs() (string, string, error) {
+	var configs []model.Config
+	err := database.DB.Where("config_key IN ?", []string{model.ScreenLinkRelayKey, model.ScreenLinkStunKey}).Find(&configs).Error
+	if err != nil {
+		return "", "", err
 	}
-	if cmdtype == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cmdtype 参数必填"})
-		return
+	values := map[string]string{}
+	for _, cfg := range configs {
+		values[cfg.Key] = strings.TrimSpace(cfg.Value)
 	}
-	if cmdtype == "beginScrcpy" {
-		scrcpyudp.ExpectSerial(serial)
-		data, err := udpserver.SendCommand(serial, udpserver.CmdBeginScrcpy, nil, 0)
-		if err != nil {
-			fmt.Println("BeginScrcpy error:", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "开始 Scrcpy 失败: " + err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"data": string(data)})
-	}
-	if cmdtype == "endScrcpy" {
-		data, err := udpserver.SendCommand(serial, udpserver.CmdEndScrcpy, nil, 0)
-		if err != nil {
-			fmt.Println("EndScrcpy error:", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "结束 Scrcpy 失败: " + err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"data": string(data)})
-	}
+	return values[model.ScreenLinkRelayKey], values[model.ScreenLinkStunKey], nil
+}
 
+func SendScreenLinkCmd(c *gin.Context) {
+	serial := strings.TrimSpace(c.Query("serial"))
+	cmdtype := strings.TrimSpace(c.Query("cmdtype"))
+	if serial == "" || (cmdtype != "begin" && cmdtype != "end") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	var cmd uint32 = udpserver.CmdEndScreenLink
+	var payload []byte
+	if cmdtype == "begin" {
+		relay, stun, err := screenLinkAddrs()
+		if err != nil || relay == "" || stun == "" {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "画面配置不完整"})
+			return
+		}
+		cmd = udpserver.CmdBeginScreenLink
+		payload = []byte(relay + "\n" + stun)
+	}
+	data, err := udpserver.SendCommand(serial, cmd, payload, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": string(data)})
 }
