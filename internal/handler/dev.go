@@ -310,8 +310,12 @@ func SendNetCamCmd(c *gin.Context) {
 	sink := strings.TrimSpace(c.Query("serial"))
 	source := strings.TrimSpace(c.Query("peer"))
 	cmdtype := strings.TrimSpace(c.Query("cmdtype"))
-	if sink == "" || source == "" || sink == source || (cmdtype != "begin" && cmdtype != "end") {
+	if sink == "" || source == "" || (cmdtype != "begin" && cmdtype != "end") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if sink == source {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "采集端和接收端是同一台设备"})
 		return
 	}
 	room := "netcam:" + sink + ":" + source
