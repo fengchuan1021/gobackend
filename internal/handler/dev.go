@@ -9,11 +9,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"gobackend/config"
 	"gobackend/internal/database"
+	"gobackend/internal/middleware"
 	"gobackend/internal/model"
 
 	"gobackend/internal/shellstream"
@@ -354,4 +358,56 @@ func SendNetCamCmd(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": room})
+}
+
+// InstallDroppedApk 保存拖入的 apk，并让设备下载后安装。
+func InstallDroppedApk(c *gin.Context) {
+	serial := strings.TrimSpace(c.PostForm("serial"))
+	file, err := c.FormFile("file")
+	if serial == "" || err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "需要设备和 apk"})
+		return
+	}
+	if !strings.EqualFold(filepath.Ext(file.Filename), ".apk") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能安装 apk"})
+		return
+	}
+	userIDRaw, ok := c.Get(middleware.UserIDKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	uid := userIDRaw.(uint)
+	var device model.Device
+	query := database.DB.Where("serial = ?", serial)
+	if roleRaw, exists := c.Get(middleware.RoleIDKey); !exists || roleRaw.(uint) != 1 {
+		query = query.Where("user_id = ?", uid)
+	}
+	if err := query.First(&device).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "设备不存在"})
+		return
+	}
+	raw := make([]byte, 8)
+	if _, err := rand.Read(raw); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成文件名失败"})
+		return
+	}
+	name := hex.EncodeToString(raw) + ".apk"
+	dir := filepath.Join(config.Cfg.SOLUTION_DIR, "antares_assets", "files")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建目录失败"})
+		return
+	}
+	savePath := filepath.Join(dir, name)
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 apk 失败"})
+		return
+	}
+	defer os.Remove(savePath)
+	data, err := udpserver.SendCommand(serial, udpserver.CmdInstallApk, []byte("/files/"+name), 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": string(data)})
 }

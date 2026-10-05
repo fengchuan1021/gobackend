@@ -47,6 +47,7 @@ const (
 	CmdExecuteShellCommand = 15
 	CmdBeginNetCam         = 16
 	CmdEndNetCam           = 17
+	CmdInstallApk          = 18
 )
 
 type ConnInfo struct {
@@ -929,6 +930,10 @@ func SendCommand(serial string, cmdType uint32, payload []byte, userID uint) ([]
 	if cmdType == CmdExecuteShellCommand {
 		respTimeout = 8 * time.Second
 		maxRetries = 2
+	}
+	if cmdType == CmdInstallApk {
+		respTimeout = 180 * time.Second
+		maxRetries = 1
 	}
 
 	for attempt := 0; attempt < maxRetries; attempt++ {

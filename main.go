@@ -71,6 +71,7 @@ func main() {
 
 	go scheduler.StartPlanTaskItemLeftRoundResetLoop(context.Background())
 	go scheduler.StartCleanupOldTasksLoop(context.Background())
+	//go scheduler.StartCleanupDroppedApkLoop(context.Background())
 
 	gin.SetMode(config.Cfg.Server.Mode)
 	r := gin.Default()
@@ -202,6 +203,7 @@ func main() {
 			dev.GET("/shellStream", handler.ShellStream)
 			dev.POST("/sendScreenLinkCmd", handler.SendScreenLinkCmd)
 			dev.POST("/sendNetCamCmd", handler.SendNetCamCmd)
+			dev.POST("/installApk", handler.InstallDroppedApk)
 		}
 		api.POST("/third/getQuNaTask", handler.GetQuNaTask)
 		api.POST("/third/updateQuNaTaskResult", handler.UpdateQuNaTaskResult)
