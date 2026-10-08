@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -21,7 +22,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const redroidImage = "127.0.0.1:5000/redroid:latest"
+const redroidImage = "192.168.1.231:5000/redroid:12.0.0-arm64-gms"
 
 var containerNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 var containerIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{12,64}$`)
@@ -520,10 +521,12 @@ func redroidSSHAuthMethods() ([]ssh.AuthMethod, error) {
 func dialRedroidSSH(ip string) (*ssh.Client, error) {
 	addr, err := sshDialAddr(ip)
 	if err != nil {
+		fmt.Println("sshDialAddr error:", err)
 		return nil, err
 	}
 	auth, err := redroidSSHAuthMethods()
 	if err != nil {
+		fmt.Println("redroidSSHAuthMethods error:", err)
 		return nil, err
 	}
 	user := os.Getenv("REDROID_SSH_USER")
@@ -537,8 +540,10 @@ func dialRedroidSSH(ip string) (*ssh.Client, error) {
 		Timeout:         8 * time.Second,
 	})
 	if err != nil {
+		fmt.Println("ssh.Dial error:", err)
 		return nil, errors.New("SSH 连接失败")
 	}
+	fmt.Println("ssh.Dial success")
 	return client, nil
 }
 
@@ -581,6 +586,7 @@ func runSSH(client *ssh.Client, cmd string, timeout time.Duration) (string, erro
 func listRedroidContainers(ip string) ([]redroidContainer, error) {
 	client, err := dialRedroidSSH(ip)
 	if err != nil {
+		fmt.Println("dialRedroidSSH error:", err)
 		return nil, err
 	}
 	defer client.Close()
@@ -588,6 +594,7 @@ func listRedroidContainers(ip string) ([]redroidContainer, error) {
 	psCmd := "docker ps -aq --filter 'ancestor=" + redroidImage + "'"
 	idsOut, err := runSSH(client, psCmd, 15*time.Second)
 	if err != nil {
+		fmt.Println("runSSH error:", err)
 		return nil, err
 	}
 	containerIDs := strings.Fields(idsOut)
