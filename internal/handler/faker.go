@@ -16,10 +16,8 @@ import (
 )
 
 type randomContact struct {
-	Name    string `json:"name"`
-	Phone   string `json:"phone"`
-	Address string `json:"address"`
-	Email   string `json:"email"`
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
 }
 
 func GetRandomContacts(c *gin.Context) {

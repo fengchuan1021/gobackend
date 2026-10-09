@@ -38,8 +38,6 @@ def main():
             {
                 "name": fake.name(),
                 "phone": fake.phone_number(),
-                "address": " ".join(fake.address().split()),
-                "email": fake.email(),
             }
         )
     json.dump(contacts, sys.stdout, ensure_ascii=False)

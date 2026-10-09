@@ -191,6 +191,8 @@ type RunShellSessionReq struct {
 	Op      string `json:"op" binding:"required"`
 	Data    string `json:"data"`
 	Seq     uint32 `json:"seq"`
+	Cols    int    `json:"cols"`
+	Rows    int    `json:"rows"`
 }
 
 // RunShellSession 通过 UDP ExecuteShellCommand 操作设备 PTY 会话
@@ -210,6 +212,8 @@ func RunShellSession(c *gin.Context) {
 		"session": req.Session,
 		"data":    req.Data,
 		"seq":     req.Seq,
+		"cols":    req.Cols,
+		"rows":    req.Rows,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "编码失败"})
