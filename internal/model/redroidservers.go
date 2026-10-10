@@ -16,6 +16,7 @@ type RedroidServer struct {
 	Ip       string     `gorm:"type:varchar(128)" json:"ip"`
 	User     User       `gorm:"foreignKey:UserID;constraint:-" json:"user,omitempty"`
 	Port     int        `gorm:"default:5555" json:"port"`
+	Password string     `gorm:"type:varchar(128)" json:"password"`
 }
 
 // TableName 指定表名

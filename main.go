@@ -221,6 +221,7 @@ func main() {
 		redroid_server.GET("/list", handler.ListRedroidServers)
 		redroid_server.GET("/get", handler.GetRedroidServer)
 		redroid_server.GET("/containers", handler.ListRedroidServerContainers)
+		redroid_server.POST("/container/create", handler.CreateRedroidContainer)
 		redroid_server.POST("/container/start", handler.StartRedroidContainer)
 		redroid_server.POST("/container/stop", handler.StopRedroidContainer)
 		redroid_server.GET("/container/location", handler.GetRedroidContainerLocation)

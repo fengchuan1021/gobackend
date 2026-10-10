@@ -27,6 +27,8 @@ type Device struct {
 	LastLoginIp   string      `gorm:"type:varchar(32);default:''" json:"last_login_ip"`
 	Latitude      float64     `gorm:"default:0" json:"latitude"`
 	Longitude     float64     `gorm:"default:0" json:"longitude"`
+	RedroidServer RedroidServer `gorm:"foreignKey:RedroidServerID;constraint:-" json:"redroid_server,omitempty"`
+	RedroidServerID uint        `gorm:"index;not null;default:0" json:"redroid_server_id"`
 }
 
 // TableName 指定表名

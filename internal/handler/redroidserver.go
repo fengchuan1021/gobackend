@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -24,7 +22,13 @@ import (
 
 var redroidImages = []string{
 	"8e29e500f810",
+	"192.168.1.231:5000/redroid:12.0.0-arm64",
 	"192.168.1.231:5000/redroid:12.0.0-arm64-gms",
+}
+
+var redroidCreateImages = map[string]struct{}{
+	"192.168.1.231:5000/redroid:12.0.0-arm64":     {},
+	"192.168.1.231:5000/redroid:12.0.0-arm64-gms": {},
 }
 
 func dockerAncestorFilters() string {
@@ -36,6 +40,10 @@ func dockerAncestorFilters() string {
 }
 
 var containerNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+var containerCreateNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,127}$`)
+var containerSerialPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
+var containerLocalePattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+var containerTimezonePattern = regexp.MustCompile(`^[A-Za-z0-9._+/-]{1,64}$`)
 var containerIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{12,64}$`)
 
 type containerActionReq struct {
@@ -47,6 +55,17 @@ type containerLocationReq struct {
 	Serial    string  `json:"serial"`
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
+}
+
+type createContainerReq struct {
+	ID        uint     `json:"id"`
+	Name      string   `json:"name"`
+	Serial    string   `json:"serial"`
+	Locale    string   `json:"locale"`
+	Timezone  string   `json:"timezone"`
+	Latitude  *float64 `json:"latitude"`
+	Longitude *float64 `json:"longitude"`
+	Image     string   `json:"image"`
 }
 
 type saveRedroidServerReq struct {
@@ -324,7 +343,7 @@ func ListRedroidServerContainers(c *gin.Context) {
 		return
 	}
 
-	list, err := listRedroidContainers(row.Ip)
+	list, err := listRedroidContainers(row.Ip,row.Password)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "data": []redroidContainer{}, "error": err.Error()})
 		return
@@ -342,6 +361,133 @@ func StartRedroidContainer(c *gin.Context) {
 // POST /api/redroid_server/container/stop
 func StopRedroidContainer(c *gin.Context) {
 	runRedroidContainerAction(c, "stop")
+}
+
+// CreateRedroidContainer 在服务器上创建容器，并把经纬度和服务器 ID 写入设备表。
+// POST /api/redroid_server/container/create
+func CreateRedroidContainer(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+
+	var req createContainerReq
+	if err := c.ShouldBindJSON(&req); err != nil || req.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "redroid" || !containerCreateNamePattern.MatchString(name) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "容器名称须为小写字母、数字或连字符"})
+		return
+	}
+	serial := strings.TrimSpace(req.Serial)
+	if !containerSerialPattern.MatchString(serial) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "序列号无效"})
+		return
+	}
+	locale := strings.TrimSpace(req.Locale)
+	if locale == "" {
+		locale = "zh-CN"
+	}
+	if !containerLocalePattern.MatchString(locale) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "语言无效"})
+		return
+	}
+	timezone := strings.TrimSpace(req.Timezone)
+	if timezone == "" {
+		timezone = "Asia/Shanghai"
+	}
+	if !containerTimezonePattern.MatchString(timezone) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "时区无效"})
+		return
+	}
+	image := strings.TrimSpace(req.Image)
+	if image == "" {
+		image = "192.168.1.231:5000/redroid:12.0.0-arm64"
+	}
+	if _, allowed := redroidCreateImages[image]; !allowed {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "镜像地址无效"})
+		return
+	}
+	if req.Latitude == nil || req.Longitude == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择经纬度"})
+		return
+	}
+	latitude := *req.Latitude
+	longitude := *req.Longitude
+	if latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "经纬度超出范围"})
+		return
+	}
+
+	row, err := ownedRedroidServer(uid, req.ID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if strings.TrimSpace(row.Ip) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未设置 IP"})
+		return
+	}
+
+	var existing model.Device
+	err = database.DB.Where("serial = ?", serial).First(&existing).Error
+	if err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "序列号已存在"})
+		return
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	device := model.Device{
+		Serial:          serial,
+		UserID:          uid,
+		Latitude:        latitude,
+		Longitude:       longitude,
+		RedroidServerID: req.ID,
+	}
+	if uid == 11 {
+		expireAt := time.Date(2030, 11, 23, 4, 5, 12, 0, time.Local)
+		device.ExpireAt = &expireAt
+	}
+	if err := database.DB.Create(&device).Error; err != nil {
+		if isDuplicateKey(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "序列号已存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		return
+	}
+
+	if err := execRedroidContainerCreate(row.Ip,row.Password, name, serial, locale, timezone, image); err != nil {
+		if delErr := database.DB.Delete(&model.Device{}, device.ID).Error; delErr != nil {
+			fmt.Println("delete device after create failure:", delErr)
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"id":                device.ID,
+			"name":              name,
+			"serial":            serial,
+			"locale":            locale,
+			"timezone":          timezone,
+			"latitude":          latitude,
+			"longitude":         longitude,
+			"image":             image,
+			"redroid_server_id": req.ID,
+		},
+	})
 }
 
 func locationSerial(c *gin.Context) string {
@@ -476,7 +622,7 @@ func runRedroidContainerAction(c *gin.Context, action string) {
 		return
 	}
 
-	if err := execRedroidContainerAction(row.Ip, name, action); err != nil {
+	if err := execRedroidContainerAction(row.Ip,row.Password, name, action); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -505,48 +651,18 @@ func sshDialAddr(ip string) (string, error) {
 	return net.JoinHostPort(ip, "22"), nil
 }
 
-func redroidSSHAuthMethods() ([]ssh.AuthMethod, error) {
-	methods := make([]ssh.AuthMethod, 0, 2)
-	keyPath := os.Getenv("REDROID_SSH_KEY")
-	if keyPath == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			keyPath = filepath.Join(home, ".ssh", "id_rsa")
-		}
+func dialRedroidSSH(ip string, password string) (*ssh.Client, error) {
+	if password == "" {
+		return nil, errors.New("未设置 SSH 密码")
 	}
-	if keyPath != "" {
-		if raw, err := os.ReadFile(keyPath); err == nil {
-			if signer, err := ssh.ParsePrivateKey(raw); err == nil {
-				methods = append(methods, ssh.PublicKeys(signer))
-			}
-		}
-	}
-	if password := os.Getenv("REDROID_SSH_PASSWORD"); password != "" {
-		methods = append(methods, ssh.Password(password))
-	}
-	if len(methods) == 0 {
-		return nil, errors.New("未配置可用的 SSH 登录方式")
-	}
-	return methods, nil
-}
-
-func dialRedroidSSH(ip string) (*ssh.Client, error) {
 	addr, err := sshDialAddr(ip)
 	if err != nil {
 		fmt.Println("sshDialAddr error:", err)
 		return nil, err
 	}
-	auth, err := redroidSSHAuthMethods()
-	if err != nil {
-		fmt.Println("redroidSSHAuthMethods error:", err)
-		return nil, err
-	}
-	user := os.Getenv("REDROID_SSH_USER")
-	if user == "" {
-		user = "root"
-	}
 	client, err := ssh.Dial("tcp", addr, &ssh.ClientConfig{
-		User:            user,
-		Auth:            auth,
+		User:            "root",
+		Auth:            []ssh.AuthMethod{ssh.Password(password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         8 * time.Second,
 	})
@@ -594,8 +710,8 @@ func runSSH(client *ssh.Client, cmd string, timeout time.Duration) (string, erro
 	return stdout.String(), nil
 }
 
-func listRedroidContainers(ip string) ([]redroidContainer, error) {
-	client, err := dialRedroidSSH(ip)
+func listRedroidContainers(ip string, password string) ([]redroidContainer, error) {
+	client, err := dialRedroidSSH(ip, password)
 	if err != nil {
 		fmt.Println("dialRedroidSSH error:", err)
 		return nil, err
@@ -634,8 +750,34 @@ func listRedroidContainers(ip string) ([]redroidContainer, error) {
 	return parseRedroidContainers(output), nil
 }
 
-func execRedroidContainerAction(ip, name, action string) error {
-	client, err := dialRedroidSSH(ip)
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+func execRedroidContainerCreate(ip,password, name, serial, locale, timezone, image string) error {
+	client, err := dialRedroidSSH(ip, password)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	cmd := strings.Join([]string{
+		"env",
+		"RDCFG_serial=" + shellSingleQuote(serial),
+		"RDCFG_persist.sys.locale=" + shellSingleQuote(locale),
+		"RDCFG_persist.sys.timezone=" + shellSingleQuote(timezone),
+		"REDROID_IMAGE=" + shellSingleQuote(image),
+		"/opt/redroid/redroid-create.sh",
+		shellSingleQuote(name),
+	}, " ")
+	if _, err := runSSH(client, cmd, 10*time.Minute); err != nil {
+		return err
+	}
+	return nil
+}
+
+func execRedroidContainerAction(ip, password, name, action string) error {
+	client, err := dialRedroidSSH(ip, password)
 	if err != nil {
 		return err
 	}
