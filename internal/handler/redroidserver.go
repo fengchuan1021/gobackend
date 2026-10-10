@@ -22,7 +22,18 @@ import (
 	"gorm.io/gorm"
 )
 
-const redroidImage = "192.168.1.231:5000/redroid:12.0.0-arm64-gms"
+var redroidImages = []string{
+	"8e29e500f810",
+	"192.168.1.231:5000/redroid:12.0.0-arm64-gms",
+}
+
+func dockerAncestorFilters() string {
+	parts := make([]string, 0, len(redroidImages))
+	for _, image := range redroidImages {
+		parts = append(parts, "--filter 'ancestor="+image+"'")
+	}
+	return strings.Join(parts, " ")
+}
 
 var containerNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 var containerIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{12,64}$`)
@@ -591,7 +602,7 @@ func listRedroidContainers(ip string) ([]redroidContainer, error) {
 	}
 	defer client.Close()
 
-	psCmd := "docker ps -aq --filter 'ancestor=" + redroidImage + "'"
+	psCmd := "docker ps -aq " + dockerAncestorFilters()
 	idsOut, err := runSSH(client, psCmd, 15*time.Second)
 	if err != nil {
 		fmt.Println("runSSH error:", err)
@@ -630,7 +641,7 @@ func execRedroidContainerAction(ip, name, action string) error {
 	}
 	defer client.Close()
 
-	listCmd := "docker ps -a --filter 'ancestor=" + redroidImage + "' --format '{{.Names}}'"
+	listCmd := "docker ps -a " + dockerAncestorFilters() + " --format '{{.Names}}'"
 	output, err := runSSH(client, listCmd, 15*time.Second)
 	if err != nil {
 		return err
