@@ -29,6 +29,7 @@ type Device struct {
 	Longitude     float64     `gorm:"default:0" json:"longitude"`
 	RedroidServer RedroidServer `gorm:"foreignKey:RedroidServerID;constraint:-" json:"redroid_server,omitempty"`
 	RedroidServerID uint        `gorm:"index;not null;default:0" json:"redroid_server_id"`
+	IsPaused        bool        `gorm:"default:false" json:"is_paused"`
 }
 
 // TableName 指定表名

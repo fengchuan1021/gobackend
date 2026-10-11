@@ -363,6 +363,56 @@ func StopRedroidContainer(c *gin.Context) {
 	runRedroidContainerAction(c, "stop")
 }
 
+// DeleteRedroidContainer 删除容器，并删除设备表中对应序列号的记录。
+// POST /api/redroid_server/container/delete
+func DeleteRedroidContainer(c *gin.Context) {
+	uid, ok := currentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	var req containerActionReq
+	if err := c.ShouldBindJSON(&req); err != nil || req.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "redroid" || !containerCreateNamePattern.MatchString(name) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "容器名称无效"})
+		return
+	}
+
+	row, err := ownedRedroidServer(uid, req.ID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+	if strings.TrimSpace(row.Ip) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "未设置 IP"})
+		return
+	}
+
+	serial, removeErr := execRedroidContainerDelete(row.Ip, row.Password, name)
+	if serial != "" && containerSerialPattern.MatchString(serial) {
+		if err := database.DB.Where(
+			"serial = ? AND (user_id = ? OR redroid_server_id = ?)",
+			serial, uid, req.ID,
+		).Delete(&model.Device{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "删除设备记录失败"})
+			return
+		}
+	}
+	if removeErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": removeErr.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0})
+}
+
 // CreateRedroidContainer 在服务器上创建容器，并把经纬度和服务器 ID 写入设备表。
 // POST /api/redroid_server/container/create
 func CreateRedroidContainer(c *gin.Context) {
@@ -774,6 +824,45 @@ func execRedroidContainerCreate(ip,password, name, serial, locale, timezone, ima
 		return err
 	}
 	return nil
+}
+
+func execRedroidContainerDelete(ip, password, name string) (string, error) {
+	client, err := dialRedroidSSH(ip, password)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	listCmd := "docker ps -a " + dockerAncestorFilters() + " --format '{{.Names}}'"
+	output, err := runSSH(client, listCmd, 15*time.Second)
+	if err != nil {
+		return "", err
+	}
+	if !containerNameListed(output, name) {
+		return "", errors.New("容器不存在")
+	}
+
+	quoted := shellSingleQuote(name)
+	serialOut, err := runSSH(client, "docker inspect -f '{{index .Config.Labels \"serial\"}}' "+quoted, 15*time.Second)
+	if err != nil {
+		return "", err
+	}
+	serial := strings.TrimSpace(serialOut)
+	if serial == "<no value>" {
+		serial = ""
+	}
+
+	if _, err := runSSH(client, "docker rm -f "+quoted, 3*time.Minute); err != nil {
+		return "", err
+	}
+	cleanupCmd := strings.Join([]string{
+		"bash -c " + shellSingleQuote("source /opt/redroid/redroid-list.sh && redroid_drop_container_dm \"$1\"") + " redroid-delete " + quoted,
+		"rm -rf " + shellSingleQuote("/opt/redroid/instances/"+name),
+	}, " && ")
+	if _, err := runSSH(client, cleanupCmd, time.Minute); err != nil {
+		return serial, err
+	}
+	return serial, nil
 }
 
 func execRedroidContainerAction(ip, password, name, action string) error {
